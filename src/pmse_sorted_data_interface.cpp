@@ -51,10 +51,11 @@ public:
              const bool unique) :
                                     _forward(isForward),
                                     _ordering(ordering),
-                                    _root(tree->root),
+                                    //_root(tree->root),
                                     _first(tree->first),
                                     _last(tree->last),
                                     _unique(unique),
+                                    _tree(tree),
                                     _inf(0) {
         cursorType = EOO;
 
@@ -143,7 +144,7 @@ public:
         /*
          * Find leaf node where key may exist
          */
-        persistent_ptr<PmseTreeNode> node = find_leaf(_root, key, _ordering);
+        persistent_ptr<PmseTreeNode> node = find_leaf(_tree->root, key, _ordering);
 
         if (node == nullptr) {
             _endPosition = nullptr;
@@ -310,6 +311,11 @@ public:
          * Advance cursor in leaves
          */
 
+        if(!_tree->root)
+        {
+            return {};
+        }
+
         /*
          * Forward
          */
@@ -474,6 +480,9 @@ public:
                                         RequestedInfo parts = kKeyAndLoc) {
         uint64_t i = 0;
         int cmp;
+        std::cout << "seek";
+        std::cout << std::endl;
+
         if (cursorType == EOO) {
             cursorType = key.firstElementType();
         }
@@ -507,7 +516,7 @@ public:
                             _cursor.node->values_array[_cursor.index]);
         }
 
-        node = find_leaf(_root, key, _ordering);
+        node = find_leaf(_tree->root, key, _ordering);
 
         if (node == NULL)
             return {};
@@ -691,10 +700,11 @@ public:
 private:
     const bool _forward;
     const BSONObj& _ordering;
-    persistent_ptr<PmseTreeNode> _root;
+    //persistent_ptr<PmseTreeNode> _root;
     persistent_ptr<PmseTreeNode> _first;
     persistent_ptr<PmseTreeNode> _last;
     const bool _unique;
+    persistent_ptr<PmseTree> _tree;
     BSONType cursorType;
     /*
      * Marks end position for seek and next. Set by setEndPosition().
@@ -769,7 +779,7 @@ void PmseSortedDataInterface::unindex(OperationContext* txn,
                                          const RecordId& loc,
                                          bool dupsAllowed) {
     BSONObj owned = key.getOwned();
-    tree->remove(pm_pool, owned, loc, dupsAllowed);
+    tree->remove(pm_pool, owned, loc, dupsAllowed, _desc->keyPattern());
 
 }
 

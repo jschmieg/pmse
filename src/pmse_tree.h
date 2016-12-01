@@ -55,18 +55,15 @@ const int64_t BSON_MIN_SIZE = 5;
 const uint64_t MAX_END = 2;
 const uint64_t MIN_END = 1;
 
-
 class BSONObj_PM {
 public:
     BSONObj_PM() = default;
 
     BSONObj_PM(persistent_ptr<char> inputData) {
-            data = inputData;
-        }
+        data = inputData;
+    }
 
-
-    BSONObj getBSON()
-    {
+    BSONObj getBSON() {
         char* data_ptr = data.get();
         return BSONObj(data_ptr);
     }
@@ -118,48 +115,64 @@ public:
     Status insert(pool_base pop, BSONObj_PM& key, const RecordId& loc,
                   const BSONObj& _ordering, bool dupsAllowed);
     void remove(pool_base pop, BSONObj& key, const RecordId& loc,
-                bool dupsAllowed);
-    void show(void);
-    persistent_ptr<PmseTreeNode> constructNewLeaf();
-    persistent_ptr<PmseTreeNode> makeTreeRoot(BSONObj_PM& key, const RecordId& loc);
-    Status insertKeyIntoLeaf(persistent_ptr<PmseTreeNode> node, BSONObj_PM& key,
-                             const RecordId& loc, const BSONObj& _ordering);
-    persistent_ptr<PmseTreeNode> find(persistent_ptr<PmseTreeNode> node, BSONObj_PM& key,
-                                 const BSONObj& _ordering);
-    persistent_ptr<PmseTreeNode> locateLeafWithKey(persistent_ptr<PmseTreeNode> node,
-                                              BSONObj_PM& key,
-                                              const BSONObj& _ordering);
-    persistent_ptr<PmseTreeNode> splitFullNodeAndInsert(pool_base pop,
-                                                   persistent_ptr<PmseTreeNode> node,
-                                                   BSONObj_PM& key,
-                                                   const RecordId& loc,
-                                                   const BSONObj& _ordering);
-    persistent_ptr<PmseTreeNode> insertIntoNodeParent(
-                    pool_base pop, persistent_ptr<PmseTreeNode> root,
-                    persistent_ptr<PmseTreeNode> node, BSONObj_PM& new_key,
-                    persistent_ptr<PmseTreeNode> new_leaf);
-    persistent_ptr<PmseTreeNode> allocateNewRoot(pool_base pop,
-                                            persistent_ptr<PmseTreeNode> left,
-                                            BSONObj_PM& new_key,
-                                            persistent_ptr<PmseTreeNode> right);
-    uint64_t get_left_index(persistent_ptr<PmseTreeNode> parent,
-                            persistent_ptr<PmseTreeNode> left);
-    persistent_ptr<PmseTreeNode> insertKeyIntoNode(pool_base pop,
-                                              persistent_ptr<PmseTreeNode> root,
-                                              persistent_ptr<PmseTreeNode> parent,
-                                              uint64_t left_index,
-                                              BSONObj_PM& new_key,
-                                              persistent_ptr<PmseTreeNode> right);
-    persistent_ptr<PmseTreeNode> insertToNodeAfterSplit(
-                    pool_base pop, persistent_ptr<PmseTreeNode> root,
-                    persistent_ptr<PmseTreeNode> old_node, uint64_t left_index,
-                    BSONObj_PM& new_key, persistent_ptr<PmseTreeNode> right);
+                bool dupsAllowed, const BSONObj& _ordering);
+
+
+
 private:
     uint64_t cut(uint64_t length);
     void placeAfter(PMEMobjpool *pm_pool, BSONObj& key, const RecordId& loc);
     void placeBefore(PMEMobjpool *pm_pool, BSONObj& key, const RecordId& loc);
-    persistent_ptr<PmseTreeNode> head;
-    persistent_ptr<PmseTreeNode> tail;
+    uint64_t get_neighbor_index(persistent_ptr<PmseTreeNode> node);
+    persistent_ptr<PmseTreeNode> coalesce_nodes(
+                    persistent_ptr<PmseTreeNode> root,
+                    persistent_ptr<PmseTreeNode> n,
+                    persistent_ptr<PmseTreeNode> neighbor,
+                    uint64_t neighbor_index, uint64_t k_prime);
+    persistent_ptr<PmseTreeNode> constructNewLeaf();
+    persistent_ptr<PmseTreeNode> makeTreeRoot(BSONObj_PM& key,
+                                             const RecordId& loc);
+    Status insertKeyIntoLeaf(persistent_ptr<PmseTreeNode> node, BSONObj_PM& key,
+                            const RecordId& loc, const BSONObj& _ordering);
+    /*persistent_ptr<PmseTreeNode> find(persistent_ptr<PmseTreeNode> node, BSONObj_PM& key,
+    const BSONObj& _ordering);*/
+    persistent_ptr<PmseTreeNode> locateLeafWithKey(
+                   persistent_ptr<PmseTreeNode> node, BSONObj& key,
+                   const BSONObj& _ordering);
+    persistent_ptr<PmseTreeNode> locateLeafWithKeyPM(
+                   persistent_ptr<PmseTreeNode> node, BSONObj_PM& key,
+                   const BSONObj& _ordering);
+    persistent_ptr<PmseTreeNode> splitFullNodeAndInsert(
+                   pool_base pop, persistent_ptr<PmseTreeNode> node,
+                   BSONObj_PM& key, const RecordId& loc,
+                   const BSONObj& _ordering);
+    persistent_ptr<PmseTreeNode> insertIntoNodeParent(
+                   pool_base pop, persistent_ptr<PmseTreeNode> root,
+                   persistent_ptr<PmseTreeNode> node, BSONObj_PM& new_key,
+                   persistent_ptr<PmseTreeNode> new_leaf);
+    persistent_ptr<PmseTreeNode> allocateNewRoot(
+                   pool_base pop, persistent_ptr<PmseTreeNode> left,
+                   BSONObj_PM& new_key, persistent_ptr<PmseTreeNode> right);
+    uint64_t getLeftIndex(persistent_ptr<PmseTreeNode> parent,
+                         persistent_ptr<PmseTreeNode> left);
+    persistent_ptr<PmseTreeNode> insertKeyIntoNode(
+                   pool_base pop, persistent_ptr<PmseTreeNode> root,
+                   persistent_ptr<PmseTreeNode> parent, uint64_t left_index,
+                   BSONObj_PM& new_key, persistent_ptr<PmseTreeNode> right);
+    persistent_ptr<PmseTreeNode> insertToNodeAfterSplit(
+                   pool_base pop, persistent_ptr<PmseTreeNode> root,
+                   persistent_ptr<PmseTreeNode> old_node, uint64_t left_index,
+                   BSONObj_PM& new_key, persistent_ptr<PmseTreeNode> right);
+    persistent_ptr<PmseTreeNode> adjust_root(pool_base pop,
+                                            persistent_ptr<PmseTreeNode> root);
+    persistent_ptr<PmseTreeNode> delete_entry(pool_base pop, BSONObj& key,
+                                             persistent_ptr<PmseTreeNode> node,
+                                             uint64_t index);
+
+    persistent_ptr<PmseTreeNode> remove_entry_from_node(
+                   pool_base pop, BSONObj& key,
+                   persistent_ptr<PmseTreeNode> node, uint64_t index);
+
     persistent_ptr<PmseTreeNode> current;
     persistent_ptr<PmseTreeNode> root;
     persistent_ptr<PmseTreeNode> first;
