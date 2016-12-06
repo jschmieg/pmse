@@ -85,6 +85,14 @@ public:
             return current;
         while (!current->is_leaf) {
             i = 0;
+            std::cout << "current: Num of keys = " << current->num_keys << std::endl;
+
+                for (i=0; i < current->num_keys; i++) {
+                    std::cout << "key[" << i << "]= "
+                                    << current->keys[i].getBSON().toString();
+                    std::cout << std::endl;
+
+                }
             while (i < current->num_keys) {
                 cmp = key.woCompare(current->keys[i].getBSON(), _ordering,
                 false);
