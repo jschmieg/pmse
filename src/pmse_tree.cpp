@@ -120,7 +120,23 @@ persistent_ptr<PmseTreeNode> PmseTree::delete_entry(
 
     // Remove key and pointer from node.
 
+    std::cout << "Removing: before: node=" << node.raw().off << std::endl;
+    std::cout << "Removing: before: node num keys=" << node->num_keys << std::endl;
+    for (uint64_t i=0; i < node->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << node->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
+
     node = remove_entry_from_node(key, node, index);
+
+    std::cout << "Removing: after: node=" << node.raw().off << std::endl;
+    std::cout << "Removing: after: node num keys=" << node->num_keys << std::endl;
+    for (uint64_t i=0; i < node->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << node->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
 
     if (node == root) {
         return adjust_root(root);
@@ -414,6 +430,15 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesce_nodes(
     }
     delete_persistent<PmseTreeNode>(n);
 
+
+    std::cout << "Removing: coalesce: root=" << root.raw().off << std::endl;
+    std::cout << "Removing: coalesce: root num keys=" << root->num_keys << std::endl;
+    for (uint64_t i=0; i < root->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << root->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
+
     return root;
 }
 
@@ -486,6 +511,14 @@ persistent_ptr<PmseTreeNode> PmseTree::adjust_root(
     delete_persistent<BSONObj_PM[TREE_ORDER]>(root->keys);
     delete_persistent<RecordId[TREE_ORDER]>(root->values_array);
     delete_persistent<PmseTreeNode>(root);
+
+    std::cout << "Removing: adjusting root: root=" << new_root.raw().off << std::endl;
+    std::cout << "Removing: adjusting root: root num keys=" << new_root->num_keys << std::endl;
+    for (uint64_t i=0; i < new_root->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << new_root->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
 
     return new_root;
 
@@ -607,6 +640,14 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
     if (current == nullptr)
         return current;
     while (!current->is_leaf) {
+        std::cout << "current: Num of keys = " << current->num_keys << std::endl;
+
+        for (i=0; i < current->num_keys; i++) {
+            std::cout << "key[" << i << "]= "
+                            << current->keys[i].getBSON().toString();
+            std::cout << std::endl;
+
+        }
         i = 0;
         while (i < current->num_keys) {
 
@@ -738,6 +779,24 @@ persistent_ptr<PmseTreeNode> PmseTree::splitFullNodeAndInsert(
     node->next = new_leaf;
     new_leaf->previous = node;
 
+    std::cout << "Splitting: old_leaf=" << node.raw().off << std::endl;
+    std::cout << "Splitting: old_leaf num keys=" << node->num_keys << std::endl;
+
+    for (uint64_t i=0; i < node->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << node->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
+
+    std::cout << "Splitting: new_leaf=" << new_leaf.raw().off << std::endl;
+    std::cout << "Splitting: new_leaf num keys=" << new_leaf->num_keys << std::endl;
+
+    for (uint64_t i=0; i < new_leaf->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << new_leaf->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
+
     /*
      * Update parents
      */
@@ -776,6 +835,16 @@ persistent_ptr<PmseTreeNode> PmseTree::insertKeyIntoNode(
     n->children_array[left_index + 1] = right;
     n->keys[left_index] = new_key;
     n->num_keys = n->num_keys + 1;
+
+    std::cout << "Inserting into existing root: root=" << n.raw().off << std::endl;
+    std::cout << "Inserting into existing root: num keys=" << n->num_keys << std::endl;
+
+    for (uint64_t i=0; i < n->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << n->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
+
     return root;
 }
 
@@ -831,6 +900,16 @@ persistent_ptr<PmseTreeNode> PmseTree::insertToNodeAfterSplit(
         child->parent = new_node;
     }
     new_root = insertIntoNodeParent(pop, root, old_node, k_prime, new_node);
+
+    std::cout << "Inserting into node after splitting: new_root=" << new_root.raw().off << std::endl;
+    std::cout << "Inserting into existing root: num keys=" << new_root->num_keys << std::endl;
+
+    for (uint64_t i=0; i < new_root->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << new_root->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
+
     return new_root;
 }
 
@@ -884,6 +963,16 @@ persistent_ptr<PmseTreeNode> PmseTree::allocateNewRoot(
     new_root->parent = nullptr;
     left->parent = new_root;
     right->parent = new_root;
+
+    std::cout << "Allocating: new root=" << new_root.raw().off << std::endl;
+    std::cout << "Allocating: new root num keys=" << new_root->num_keys << std::endl;
+
+    for (uint64_t i=0; i < new_root->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << new_root->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
+
     return new_root;
 }
 
@@ -911,7 +1000,14 @@ Status PmseTree::insert(pool_base pop, BSONObj_PM& key, const RecordId& loc,
         return Status::OK();
     }
     node = locateLeafWithKeyPM(root, key, _ordering);
+    std::cout << "current: Num of keys = " << node->num_keys << std::endl;
 
+    for (uint64_t i=0; i < node->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << node->keys[i].getBSON().toString();
+        std::cout << std::endl;
+
+    }
     /*
      * There is place for new value
      */
@@ -919,6 +1015,13 @@ Status PmseTree::insert(pool_base pop, BSONObj_PM& key, const RecordId& loc,
         transaction::exec_tx(pop, [&] {
             status = insertKeyIntoLeaf(node,key,loc,_ordering);
         });
+        std::cout << "Inserting: leaf=" << node.raw().off << std::endl;
+        std::cout << "Inserting: leaf num keys=" << node->num_keys << std::endl;
+        for (uint64_t i=0; i < node->num_keys; i++) {
+            std::cout << "key[" << i << "]= "
+                            << node->keys[i].getBSON().toString();
+            std::cout << std::endl;
+        }
         return status;
     }
 

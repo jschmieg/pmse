@@ -99,6 +99,7 @@ public:
                     OperationContext* txn, bool isForward) const;
 
 private:
+    void moveToNext();
     StringData filepath;
     pool<PmseTree> pm_pool;
     persistent_ptr<PmseTree> tree;
