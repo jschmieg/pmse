@@ -637,7 +637,7 @@ public:
             _cursor.index = i - 1;
             if (_forward) {
                 //TODO:add incrementing here
-                moveToNext();
+                //moveToNext();
                 nextValue = next(parts);
                 if (!nextValue.is_initialized()) {
                     return {};
@@ -707,7 +707,7 @@ public:
             while (key.woCompare(_cursor.node->keys[_cursor.index].getBSON(),
                             _ordering, false) == 0) {
                 //TODO:add incrementing here
-                moveToNext();
+                //moveToNext();
                 nextValue = next(parts);
                 if (!nextValue.is_initialized()) {
                     return {};

@@ -512,13 +512,13 @@ persistent_ptr<PmseTreeNode> PmseTree::adjust_root(
     delete_persistent<RecordId[TREE_ORDER]>(root->values_array);
     delete_persistent<PmseTreeNode>(root);
 
-    std::cout << "Removing: adjusting root: root=" << new_root.raw().off << std::endl;
+    /*std::cout << "Removing: adjusting root: root=" << new_root.raw().off << std::endl;
     std::cout << "Removing: adjusting root: root num keys=" << new_root->num_keys << std::endl;
     for (uint64_t i=0; i < new_root->num_keys; i++) {
         std::cout << "key[" << i << "]= "
                         << new_root->keys[i].getBSON().toString();
         std::cout << std::endl;
-    }
+    }*/
 
     return new_root;
 
