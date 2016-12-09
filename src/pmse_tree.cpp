@@ -531,8 +531,16 @@ persistent_ptr<PmseTreeNode> PmseTree::remove_entry_from_node(
     // Remove the key and shift other keys accordingly.
     i = index;
 
-    std::cout << "Num of keys = " << node->num_keys << std::endl;
+    /*std::cout << "Removing: before: node=" << node.raw().off << std::endl;
+    std::cout << "Removing: before: node num keys=" << node->num_keys << std::endl;
+    for (i=0; i < node->num_keys+1; i++) {
+        std::cout << "child[" << i << "]= "
+                        << node->children_array[i];
+        std::cout << std::endl;
+    }*/
 
+    std::cout << "Num of keys = " << node->num_keys << std::endl;
+    i = index;
     for (++i; i < node->num_keys; i++) {
         std::cout << " moving key to left key[" << i << "]= "
                         << node->keys[i].getBSON().toString();
@@ -550,15 +558,24 @@ persistent_ptr<PmseTreeNode> PmseTree::remove_entry_from_node(
             node->values_array[i - 1] = node->values_array[i];
         }
     } else {
-        /*num_pointers = node->num_keys + 1;
+        num_pointers = node->num_keys + 1;
+        i++;
         for (++i; i < num_pointers; i++) {
             std::cout << " moving pointers to left i = " << i;
             std::cout << std::endl;
             node->children_array[i - 1] = node->children_array[i];
-        }*/
+        }
     }
 
-    node->num_keys--;
+    /*std::cout << "Removing: after: node=" << node.raw().off << std::endl;
+    std::cout << "Removing: after: node num keys=" << node->num_keys << std::endl;
+    for (i=0; i < node->num_keys+1; i++) {
+        std::cout << "child[" << i << "]= "
+                        << node->children_array[i];
+        std::cout << std::endl;
+    }*/
+
+
 
     // Set the other pointers to NULL for tidiness.
     // A leaf uses the last pointer to point to the next leaf.
@@ -566,7 +583,7 @@ persistent_ptr<PmseTreeNode> PmseTree::remove_entry_from_node(
         for (i = node->num_keys + 1; i < TREE_ORDER; i++)
             node->children_array[i] = nullptr;
 
-
+    node->num_keys--;
 
     return node;
 }

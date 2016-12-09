@@ -84,7 +84,7 @@ public:
         if (current == nullptr)
             return current;
         while (!current->is_leaf) {
-
+            std::cout << "current: iterating through node=" << current.raw().off << std::endl;
             std::cout << "current: Num of keys = " << current->num_keys << std::endl;
 
                 for (i=0; i < current->num_keys; i++) {
@@ -93,6 +93,13 @@ public:
                     std::cout << std::endl;
 
                 }
+                /*std::cout << "current: iterating through node" << current.raw().off << std::endl;
+                std::cout << "current: iterating through node num keys=" << current->num_keys << std::endl;
+                for (i=0; i < current->num_keys+1; i++) {
+                    std::cout << "child[" << i << "]= "
+                                    << current->children_array[i];
+                    std::cout << std::endl;
+                }*/
                 i = 0;
             while (i < current->num_keys) {
                 cmp = key.woCompare(current->keys[i].getBSON(), _ordering,
@@ -127,6 +134,11 @@ public:
         uint64_t i;
         int cmp;
 
+        if(!_tree->root)
+        {
+            return;
+        }
+
         if (inclusive) {
             cursorType = key.firstElementType();
         } else {
@@ -154,6 +166,14 @@ public:
          * Find leaf node where key may exist
          */
         persistent_ptr<PmseTreeNode> node = find_leaf(_tree->root, key, _ordering);
+
+        std::cout << "Set end pos: found node=" << node.raw().off << std::endl;
+        std::cout << "Set end pos: found node num keys=" << node->num_keys << std::endl;
+        for (i=0; i < node->num_keys; i++) {
+            std::cout << "key[" << i << "]= "
+                            << node->keys[i].getBSON().toString();
+            std::cout << std::endl;
+        }
 
         if (node == nullptr) {
             _endPosition = nullptr;
@@ -346,7 +366,13 @@ public:
             {
                 _returnValue.node = _cursor.node;
                 _returnValue.index = _cursor.index;
-
+                std::cout << "next node=" << _returnValue.node.raw().off << std::endl;
+                std::cout << "next: node num keys=" <<_returnValue.node->num_keys << std::endl;
+                for (uint64_t i=0; i < _returnValue.node->num_keys; i++) {
+                    std::cout << "key[" << i << "]= "
+                                    << _returnValue.node->keys[_returnValue.index].getBSON().toString();
+                    std::cout << std::endl;
+                }
                 //TODO:add incrementing here
                 moveToNext();
                 return IndexKeyEntry(_returnValue.node->keys[_returnValue.index].getBSON(),
@@ -576,7 +602,7 @@ public:
 
 
         persistent_ptr<PmseTreeNode> node;
-        boost::optional<IndexKeyEntry> nextValue;
+        //boost::optional<IndexKeyEntry> nextValue;
 
         if (SimpleBSONObjComparator::kInstance.evaluate(key == min)) {
             _cursor.node = _first;
@@ -615,6 +641,15 @@ public:
         }
 
         node = find_leaf(_tree->root, key, _ordering);
+        std::cout << "seek: found node=" << node.raw().off << std::endl;
+        std::cout << "seek: found  Num of keys = " << node->num_keys << std::endl;
+
+            for (i=0; i < node->num_keys; i++) {
+                std::cout << "key[" << i << "]= "
+                                << node->keys[i].getBSON().toString();
+                std::cout << std::endl;
+
+            }
 
         if (node == NULL)
             return {};
@@ -638,8 +673,9 @@ public:
             if (_forward) {
                 //TODO:add incrementing here
                 //moveToNext();
-                nextValue = next(parts);
-                if (!nextValue.is_initialized()) {
+                next(parts);
+//                if (!nextValue.is_initialized()) {
+                if(!_cursor.node){
                     return {};
                 }
             }
@@ -708,8 +744,9 @@ public:
                             _ordering, false) == 0) {
                 //TODO:add incrementing here
                 //moveToNext();
-                nextValue = next(parts);
-                if (!nextValue.is_initialized()) {
+                next(parts);
+                if(!_cursor.node){
+                //if (!nextValue.is_initialized()) {
                     return {};
                 }
             }
