@@ -353,24 +353,37 @@ public:
         {
             return {};
         }
-        if(_cursor.node==nullptr)
+        if(_tree->_cursor.node==nullptr)
             return {};
+
+        if(_tree->modified)
+        {
+            _tree->modified = false;
+            if(_tree->_cursor.index!=0)
+            {
+                _tree->_cursor.index--;
+            }
+            /*else{
+                _tree->_cursor.node = _tree->_cursor.node->previous;
+                _tree->_cursor.index = _tree->_cursor.node->num_keys-1;
+            }*/
+        }
 
         if (_endPosition
                         && (SimpleBSONObjComparator::kInstance.evaluate(
-                                        _cursor.node->keys[_cursor.index].getBSON()
+                                        _tree->_cursor.node->keys[_tree->_cursor.index].getBSON()
                                         == (*_endPosition).getBSON()))) {
             return {};
         }
-        if (correctType(_cursor.node->keys[_cursor.index].getBSON()))
+        if (correctType(_tree->_cursor.node->keys[_tree->_cursor.index].getBSON()))
             {
-                _returnValue.node = _cursor.node;
-                _returnValue.index = _cursor.index;
+                _returnValue.node = _tree->_cursor.node;
+                _returnValue.index = _tree->_cursor.index;
                 std::cout << "next node=" << _returnValue.node.raw().off << std::endl;
                 std::cout << "next: node num keys=" <<_returnValue.node->num_keys << std::endl;
                 for (uint64_t i=0; i < _returnValue.node->num_keys; i++) {
                     std::cout << "key[" << i << "]= "
-                                    << _returnValue.node->keys[_returnValue.index].getBSON().toString();
+                                    << _returnValue.node->keys[i].getBSON().toString();
                     std::cout << std::endl;
                 }
                 //TODO:add incrementing here
@@ -386,37 +399,37 @@ public:
 //            /*
 //             * There are next keys - increment index
 //             */
-//            if (_cursor.index < (_cursor.node->num_keys - 1)) {
-//                _cursor.index++;
+//            if (_tree->_cursor.index < (_tree->_cursor.node->num_keys - 1)) {
+//                _tree->_cursor.index++;
 //
 //                if (_endPosition
 //                                && (SimpleBSONObjComparator::kInstance.evaluate(
-//                                                _cursor.node->keys[_cursor.index].getBSON()
+//                                                _tree->_cursor.node->keys[_tree->_cursor.index].getBSON()
 //                                                == (*_endPosition).getBSON()))) {
 //                    return {};
 //                }
-//                if (correctType(_cursor.node->keys[_cursor.index].getBSON()))
+//                if (correctType(_tree->_cursor.node->keys[_tree->_cursor.index].getBSON()))
 //                    return IndexKeyEntry(
-//                                    _cursor.node->keys[_cursor.index].getBSON(),
-//                                    _cursor.node->values_array[_cursor.index]);
+//                                    _tree->_cursor.node->keys[_tree->_cursor.index].getBSON(),
+//                                    _tree->_cursor.node->values_array[_tree->_cursor.index]);
 //            } else {
 //                /*
 //                 * Move to next node - if it exist
 //                 */
-//                if (_cursor.node->next != nullptr) {
+//                if (_tree->_cursor.node->next != nullptr) {
 //
-//                    _cursor.node = _cursor.node->next;
-//                    _cursor.index = 0;
+//                    _tree->_cursor.node = _tree->_cursor.node->next;
+//                    _tree->_cursor.index = 0;
 //                    if (_endPosition
-//                                    && (SimpleBSONObjComparator::kInstance.evaluate(_cursor.node->keys[_cursor.index].getBSON()
+//                                    && (SimpleBSONObjComparator::kInstance.evaluate(_tree->_cursor.node->keys[_tree->_cursor.index].getBSON()
 //                                                    == (*_endPosition).getBSON()))) {
 //                        return {};
 //                    }
 //                    if (correctType(
-//                                    _cursor.node->keys[_cursor.index].getBSON()))
+//                                    _tree->_cursor.node->keys[_tree->_cursor.index].getBSON()))
 //                        return IndexKeyEntry(
-//                                        _cursor.node->keys[_cursor.index].getBSON(),
-//                                        _cursor.node->values_array[_cursor.index]);
+//                                        _tree->_cursor.node->keys[_tree->_cursor.index].getBSON(),
+//                                        _tree->_cursor.node->values_array[_tree->_cursor.index]);
 //                } else {
 //                    return {};
 //                }
@@ -427,35 +440,35 @@ public:
 //            /*
 //             * There are next keys - increment index
 //             */
-//            if (_cursor.index > 0) {
-//                _cursor.index--;
+//            if (_tree->_cursor.index > 0) {
+//                _tree->_cursor.index--;
 //                if (_endPosition
-//                                && SimpleBSONObjComparator::kInstance.evaluate((_cursor.node->keys[_cursor.index].getBSON()
+//                                && SimpleBSONObjComparator::kInstance.evaluate((_tree->_cursor.node->keys[_tree->_cursor.index].getBSON()
 //                                                == (*_endPosition).getBSON()))) {
 //                    return {};
 //                }
-//                if (correctType(_cursor.node->keys[_cursor.index].getBSON()))
+//                if (correctType(_tree->_cursor.node->keys[_tree->_cursor.index].getBSON()))
 //                    return IndexKeyEntry(
-//                                    _cursor.node->keys[_cursor.index].getBSON(),
-//                                    _cursor.node->values_array[_cursor.index]);
+//                                    _tree->_cursor.node->keys[_tree->_cursor.index].getBSON(),
+//                                    _tree->_cursor.node->values_array[_tree->_cursor.index]);
 //            } else {
 //                /*
 //                 * Move to prev node - if it exist
 //                 */
-//                if (_cursor.node->previous != nullptr) {
+//                if (_tree->_cursor.node->previous != nullptr) {
 //
-//                    _cursor.node = _cursor.node->previous;
-//                    _cursor.index = _cursor.node->num_keys - 1;
+//                    _tree->_cursor.node = _tree->_cursor.node->previous;
+//                    _tree->_cursor.index = _tree->_cursor.node->num_keys - 1;
 //                    if (_endPosition
-//                                    && SimpleBSONObjComparator::kInstance.evaluate(_cursor.node->keys[_cursor.index].getBSON()
+//                                    && SimpleBSONObjComparator::kInstance.evaluate(_tree->_cursor.node->keys[_tree->_cursor.index].getBSON()
 //                                                    == (*_endPosition).getBSON())) {
 //                        return {};
 //                    }
 //                    if (correctType(
-//                                    _cursor.node->keys[_cursor.index].getBSON()))
+//                                    _tree->_cursor.node->keys[_tree->_cursor.index].getBSON()))
 //                        return IndexKeyEntry(
-//                                        _cursor.node->keys[_cursor.index].getBSON(),
-//                                        _cursor.node->values_array[_cursor.index]);
+//                                        _tree->_cursor.node->keys[_tree->_cursor.index].getBSON(),
+//                                        _tree->_cursor.node->values_array[_tree->_cursor.index]);
 //                } else {
 //                    return {};
 //                }
@@ -545,20 +558,20 @@ public:
             /*
              * There are next keys - increment index
              */
-            if (_cursor.index < (_cursor.node->num_keys - 1)) {
-                _cursor.index++;
+            if (_tree->_cursor.index < (_tree->_cursor.node->num_keys - 1)) {
+                _tree->_cursor.index++;
             }
             else {
                 /*
                  * Move to next node - if it exist
                  */
-                if (_cursor.node->next != nullptr) {
+                if (_tree->_cursor.node->next != nullptr) {
 
-                    _cursor.node = _cursor.node->next;
-                    _cursor.index = 0;
+                    _tree->_cursor.node = _tree->_cursor.node->next;
+                    _tree->_cursor.index = 0;
                 }
                 else {
-                    _cursor.node = nullptr;
+                    _tree->_cursor.node = nullptr;
                 }
             }
         }
@@ -566,19 +579,19 @@ public:
             /*
              * There are next keys - increment index
              */
-            if (_cursor.index > 0) {
-                _cursor.index--;
+            if (_tree->_cursor.index > 0) {
+                _tree->_cursor.index--;
             } else {
                 /*
                  * Move to prev node - if it exist
                  */
-                if (_cursor.node->previous != nullptr) {
+                if (_tree->_cursor.node->previous != nullptr) {
 
-                    _cursor.node = _cursor.node->previous;
-                    _cursor.index = _cursor.node->num_keys - 1;
+                    _tree->_cursor.node = _tree->_cursor.node->previous;
+                    _tree->_cursor.index = _tree->_cursor.node->num_keys - 1;
                 }
                 else {
-                    _cursor.node = nullptr;
+                    _tree->_cursor.node = nullptr;
                 }
 
             }
@@ -593,8 +606,13 @@ public:
 
         _returnValue = {};
 
-        std::cout << "seek";
+        std::cout << "seek = " << key.toString();
         std::cout << std::endl;
+
+        if(!_tree->root)
+        {
+            return {};
+        }
 
         if (cursorType == EOO) {
             cursorType = key.firstElementType();
@@ -605,14 +623,14 @@ public:
         //boost::optional<IndexKeyEntry> nextValue;
 
         if (SimpleBSONObjComparator::kInstance.evaluate(key == min)) {
-            _cursor.node = _first;
-            _cursor.index = 0;
+            _tree->_cursor.node = _first;
+            _tree->_cursor.index = 0;
             if (_endPosition
-                            && SimpleBSONObjComparator::kInstance.evaluate(_cursor.node->keys[_cursor.index].getBSON()
+                            && SimpleBSONObjComparator::kInstance.evaluate(_tree->_cursor.node->keys[_tree->_cursor.index].getBSON()
                                             == (*_endPosition).getBSON()))
                 return {};
-            _returnValue.node = _cursor.node;
-            _returnValue.index = _cursor.index;
+            _returnValue.node = _tree->_cursor.node;
+            _returnValue.index = _tree->_cursor.index;
 
             //TODO:add incrementing here
             moveToNext();
@@ -624,15 +642,15 @@ public:
             if (_endPosition && _inf == MAX_END && !inclusive)
                 return {};
 
-            _cursor.node = _last;
-            _cursor.index = (_cursor.node)->num_keys - 1;
+            _tree->_cursor.node = _last;
+            _tree->_cursor.index = (_tree->_cursor.node)->num_keys - 1;
             if (_endPosition
-                            && SimpleBSONObjComparator::kInstance.evaluate(_cursor.node->keys[_cursor.index].getBSON()
+                            && SimpleBSONObjComparator::kInstance.evaluate(_tree->_cursor.node->keys[_tree->_cursor.index].getBSON()
                                             == (*_endPosition).getBSON()))
                 return {};
 
-            _returnValue.node = _cursor.node;
-            _returnValue.index = _cursor.index;
+            _returnValue.node = _tree->_cursor.node;
+            _returnValue.index = _tree->_cursor.index;
 
             //TODO:add incrementing here
             moveToNext();
@@ -668,19 +686,19 @@ public:
          * If element was not found: return the last one
          */
         if (i == node->num_keys) {
-            _cursor.node = node;
-            _cursor.index = i - 1;
+            _tree->_cursor.node = node;
+            _tree->_cursor.index = i - 1;
             if (_forward) {
                 //TODO:add incrementing here
                 //moveToNext();
                 next(parts);
 //                if (!nextValue.is_initialized()) {
-                if(!_cursor.node){
+                if(!_tree->_cursor.node){
                     return {};
                 }
             }
-            _returnValue.node = _cursor.node;
-            _returnValue.index = _cursor.index;
+            _returnValue.node = _tree->_cursor.node;
+            _returnValue.index = _tree->_cursor.index;
 
             //TODO:add incrementing here
             moveToNext();
@@ -694,8 +712,8 @@ public:
          * Check if next object has correct type. If not, go to next one.
          */
         if (cmp != 0) {
-            _cursor.node = node;
-            _cursor.index = i;
+            _tree->_cursor.node = node;
+            _tree->_cursor.index = i;
 
             if (_endPosition && SimpleBSONObjComparator::kInstance.evaluate(node->keys[i].getBSON() == (*_endPosition).getBSON())) {
                 return {};
@@ -705,26 +723,26 @@ public:
              * Check object type. If wrong return next.
              * For "Backward" direction return previous object because we are just after bigger one.
              */
-            if (correctType(_cursor.node->keys[_cursor.index].getBSON())) {
+            if (correctType(_tree->_cursor.node->keys[_tree->_cursor.index].getBSON())) {
                 if (_forward) {
                     //TODO:add incrementing here
-                    _returnValue.node = _cursor.node;
-                    _returnValue.index = _cursor.index;
+                    _returnValue.node = _tree->_cursor.node;
+                    _returnValue.index = _tree->_cursor.index;
 
                     //TODO:add incrementing here
                     moveToNext();
                     return IndexKeyEntry(_returnValue.node->keys[_returnValue.index].getBSON(),
                                     _returnValue.node->values_array[_returnValue.index]);
                 } else {
-                    _returnValue.node = _cursor.node;
-                    _returnValue.index = _cursor.index;
+                    _returnValue.node = _tree->_cursor.node;
+                    _returnValue.index = _tree->_cursor.index;
 
                     //TODO:add incrementing here
                     return next();
                 }
             } else
-                _returnValue.node = _cursor.node;
-                _returnValue.index = _cursor.index;
+                _returnValue.node = _tree->_cursor.node;
+                _returnValue.index = _tree->_cursor.index;
 
                 //TODO:add incrementing here
                 moveToNext();
@@ -738,20 +756,20 @@ public:
          * If inclusive - return next not-equal element (while)
          */
         if (!inclusive) {
-            _cursor.node = node;
-            _cursor.index = i;
-            while (key.woCompare(_cursor.node->keys[_cursor.index].getBSON(),
+            _tree->_cursor.node = node;
+            _tree->_cursor.index = i;
+            while (key.woCompare(_tree->_cursor.node->keys[_tree->_cursor.index].getBSON(),
                             _ordering, false) == 0) {
                 //TODO:add incrementing here
                 //moveToNext();
                 next(parts);
-                if(!_cursor.node){
+                if(!_tree->_cursor.node){
                 //if (!nextValue.is_initialized()) {
                     return {};
                 }
             }
-            _returnValue.node = _cursor.node;
-            _returnValue.index = _cursor.index;
+            _returnValue.node = _tree->_cursor.node;
+            _returnValue.index = _tree->_cursor.index;
 
             //TODO:add incrementing here
             moveToNext();
@@ -768,10 +786,10 @@ public:
                 /*
                  * It is not first element. Return it.
                  */
-                _cursor.node = node;
-                _cursor.index = i;
-                _returnValue.node = _cursor.node;
-                _returnValue.index = _cursor.index;
+                _tree->_cursor.node = node;
+                _tree->_cursor.index = i;
+                _returnValue.node = _tree->_cursor.node;
+                _returnValue.index = _tree->_cursor.index;
 
                 //TODO:add incrementing here
                 moveToNext();
@@ -781,8 +799,8 @@ public:
                 /*
                  * It is first element. We should check previous nodes (non-unique keys) - forward
                  */
-                _cursor.node = node;
-                _cursor.index = i;
+                _tree->_cursor.node = node;
+                _tree->_cursor.index = i;
                 _previousCursor.node = node;
                 _previousCursor.index = i;
                 previous();
@@ -792,8 +810,8 @@ public:
                 while (!key.woCompare(
                                 _previousCursor.node->keys[_previousCursor.index].getBSON(),
                                 _ordering, false)) {
-                    _cursor.node = _previousCursor.node;
-                    _cursor.index = _previousCursor.index;
+                    _tree->_cursor.node = _previousCursor.node;
+                    _tree->_cursor.index = _previousCursor.index;
                     if (!previous()) {
                         /*
                          * There are no more prev
@@ -802,8 +820,8 @@ public:
                     }
 
                 }
-                _returnValue.node = _cursor.node;
-                _returnValue.index = _cursor.index;
+                _returnValue.node = _tree->_cursor.node;
+                _returnValue.index = _tree->_cursor.index;
 
                 //TODO:add incrementing here
                 moveToNext();
@@ -814,8 +832,8 @@ public:
         }                //if(_forward){
         else {
             while (key.woCompare(node->keys[i].getBSON(), _ordering, false) == 0) {
-                _cursor.node = node;
-                _cursor.index = i;
+                _tree->_cursor.node = node;
+                _tree->_cursor.index = i;
                 /*
                  * There are next keys - increment i
                  */
@@ -833,8 +851,8 @@ public:
                 }
 
             }
-            _returnValue.node = _cursor.node;
-            _returnValue.index = _cursor.index;
+            _returnValue.node = _tree->_cursor.node;
+            _returnValue.index = _tree->_cursor.index;
 
             //TODO:add incrementing here
             moveToNext();
@@ -892,11 +910,8 @@ private:
      * Cursor used for iterating with next until "_endPosition"
      */
 
-    struct CursorObject {
-        persistent_ptr<PmseTreeNode> node;
-        uint64_t index;
-    };
-    CursorObject _cursor;
+
+
     CursorObject _previousCursor;
     CursorObject _returnValue;
     BSONObj min;

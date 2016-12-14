@@ -71,6 +71,7 @@ public:
     uint64_t minMax = 0;
 };
 
+
 struct PmseTreeNode {
     PmseTreeNode() :
                     num_keys(0) {
@@ -106,6 +107,13 @@ struct PmseTreeNode {
     persistent_ptr<PmseTreeNode> previous = nullptr;
     persistent_ptr<PmseTreeNode> parent = nullptr;
     p<bool> is_leaf = false;
+};
+
+
+
+struct CursorObject {
+    persistent_ptr<PmseTreeNode> node;
+    uint64_t index;
 };
 
 class PmseTree {
@@ -182,7 +190,9 @@ private:
     persistent_ptr<PmseTreeNode> root;
     persistent_ptr<PmseTreeNode> first;
     persistent_ptr<PmseTreeNode> last;
+    CursorObject _cursor;
     BSONObj _ordering;
+    p<bool> modified = false;
 };
 
 }

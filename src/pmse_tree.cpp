@@ -38,6 +38,8 @@
 #include "mongo/stdx/memory.h"
 
 #include "pmse_tree.h"
+#include "pmse_sorted_data_interface.h"
+
 
 #include "errno.h"
 #include "libpmemobj++/transaction.hpp"
@@ -129,6 +131,7 @@ persistent_ptr<PmseTreeNode> PmseTree::delete_entry(
     }
 
     node = remove_entry_from_node(key, node, index);
+    modified = true;
 
     std::cout << "Removing: after: node=" << node.raw().off << std::endl;
     std::cout << "Removing: after: node num keys=" << node->num_keys << std::endl;
@@ -204,6 +207,25 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
      * Pull the neighbor's last key-pointer pair over
      * from the neighbor's right end to n's left end.
      */
+    std::cout << "Redistribute" << std::endl;
+
+    std::cout << "Removing: Redistribute: n=" << n.raw().off << std::endl;
+    std::cout << "n: Num of keys = " << n->num_keys << std::endl;
+
+    for (i=0; i < n->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << n->keys[i].getBSON().toString();
+        std::cout << std::endl;
+
+    }
+    std::cout << "Removing: Redistribute: neighbor=" << neighbor.raw().off << std::endl;
+    std::cout << "neighbor: Num of keys = " << neighbor->num_keys << std::endl;
+
+    for (i=0; i < neighbor->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << neighbor->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
 
     if (neighbor_index != -1) {
         if (!n->is_leaf) {
@@ -276,6 +298,33 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
     n->num_keys++;
     neighbor->num_keys--;
 
+
+    if(_cursor.node == neighbor)
+    {
+        _cursor.node = n;
+        _cursor.index = 0;
+    }
+
+    std::cout << "Redistribute end" << std::endl;
+
+        std::cout << "Removing: Redistribute: n=" << n.raw().off << std::endl;
+        std::cout << "n: Num of keys = " << n->num_keys << std::endl;
+
+        for (i=0; i < n->num_keys; i++) {
+            std::cout << "key[" << i << "]= "
+                            << n->keys[i].getBSON().toString();
+            std::cout << std::endl;
+
+        }
+        std::cout << "Removing: Redistribute: neighbor=" << neighbor.raw().off << std::endl;
+        std::cout << "neighbor: Num of keys = " << neighbor->num_keys << std::endl;
+
+        for (i=0; i < neighbor->num_keys; i++) {
+            std::cout << "key[" << i << "]= "
+                            << neighbor->keys[i].getBSON().toString();
+            std::cout << std::endl;
+        }
+
     return root;
 }
 
@@ -311,6 +360,15 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesce_nodes(
     for (i=0; i < n->num_keys; i++) {
         std::cout << "key[" << i << "]= "
                         << n->keys[i].getBSON().toString();
+        std::cout << std::endl;
+
+    }
+
+    std::cout << "neighbor: Num of keys = " << neighbor->num_keys << std::endl;
+
+    for (i=0; i < neighbor->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << neighbor->keys[i].getBSON().toString();
         std::cout << std::endl;
 
     }
@@ -415,6 +473,12 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesce_nodes(
             std::cout << std::endl;
             break;
         }
+    }
+
+    if(_cursor.node == n)
+    {
+        _cursor.node = neighbor;
+        _cursor.index = 0;
     }
 
     root = delete_entry(k_prime_temp, n->parent, i);
@@ -548,6 +612,9 @@ persistent_ptr<PmseTreeNode> PmseTree::remove_entry_from_node(
         node->keys[i - 1] = node->keys[i];
 
     }
+    //TODO: forget last key
+    //node->keys[i-1] = null;
+
     // Remove the pointer and shift other pointers accordingly.
     i = index;
     if (node->is_leaf) {
@@ -578,7 +645,6 @@ persistent_ptr<PmseTreeNode> PmseTree::remove_entry_from_node(
 
 
     // Set the other pointers to NULL for tidiness.
-    // A leaf uses the last pointer to point to the next leaf.
     if (!node->is_leaf)
         for (i = node->num_keys + 1; i < TREE_ORDER; i++)
             node->children_array[i] = nullptr;
