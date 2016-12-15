@@ -80,11 +80,35 @@ void PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
             std::cout << std::endl;
             recordIndex = i;
             if (dupsAllowed) {
+                //TODO: maybe go directly to previous node
                 if (key_record.repr() != loc.repr()) {
                     std::cout
                                     << "found key equal, but recID different, continue";
                     std::cout << std::endl;
-                    continue;
+
+                    while((key.woCompare(node->keys[i].getBSON(), _ordering, false)==0) && (node->values_array[i]).repr() != loc.repr())
+                    {
+                        if(i>0)
+                        {
+                            i--;
+                        }
+                        else
+                        {
+                            if(node->previous)
+                            {
+                                node=node->previous;
+                                i = node->num_keys-1;
+                                std::cout << "Prev node " << node.raw().off << std::endl;
+                                std::cout << "Prev node num keys" << node->num_keys << std::endl;
+                                for (uint64_t j = 0; j < node->num_keys; j++) {
+                                       std::cout << "print key[" << j << "] = "
+                                                       << node->keys[j].getBSON().toString();
+                                       std::cout << std::endl;
+                                }
+
+                            }
+                        }
+                    }
                 }
             }
             /*
@@ -451,7 +475,10 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesce_nodes(
             neighbor->num_keys++;
         }
         if(n->next)
+        {
+            std::cout << "Removing: coalesce: n->next" << n->next.raw().off << std::endl;
             n->next->previous = neighbor;
+        }
         neighbor->next = n->next;
         /*neighbor->values_array[TREE_ORDER - 1] =
                         n->values_array[TREE_ORDER - 1];*/
@@ -859,6 +886,8 @@ persistent_ptr<PmseTreeNode> PmseTree::splitFullNodeAndInsert(
      * Update pointers next, previous
      */
     new_leaf->next = node->next;
+    if(node->next)
+        node->next->previous = new_leaf;
     node->next = new_leaf;
     new_leaf->previous = node;
 
