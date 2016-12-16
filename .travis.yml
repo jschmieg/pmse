@@ -2,4 +2,5 @@ language: cpp
 sudo: required
 before_install:
   - ./scripts/dependencies.sh
-script: scons
+script:
+  - ./scripts/build.sh
