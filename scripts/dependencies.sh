@@ -17,7 +17,7 @@ ls
 cd src/mongo/db/modules/
 pwd
 ls
-ln -sf ~/pmse pmse
+cp -r ~/pmse .
 ls
 cd src/mongo/db/modules/pmse
 pwd
