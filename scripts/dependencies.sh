@@ -12,14 +12,15 @@ cd ..
 git clone https://github.com/mongodb/mongo.git
 cd mongo
 mkdir -p src/mongo/db/modules/
-pwd
+#pwd
+#ls
+#cd src/mongo/db/modules/
+#pwd
+#ls
+cd ..
+cp -r pmse mongo/src/mongo/db/modules/
 ls
-cd src/mongo/db/modules/
-pwd
-ls
-cp -r ~/pmse .
-ls
-cd src/mongo/db/modules/pmse
+cd mongo/src/mongo/db/modules/pmse
 pwd
 ls
 
