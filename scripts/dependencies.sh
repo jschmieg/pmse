@@ -11,7 +11,10 @@ ls /usr/bin/ | grep g++
 ls /usr/bin/ | grep gcc
 gcc --version
 g++ --version
-
+update-alternatives --set gcc "/usr/bin/gcc-5"
+update-alternatives --set gcc "/usr/bin/g++-5"
+gcc --version
+g++ --version
 
 #sudo apt-get install pandoc
 #sudo apt-get install doxygen
