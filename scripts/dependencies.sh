@@ -14,8 +14,8 @@ cd mongo
 mkdir -p src/mongo/db/modules/
 pwd
 ls
-
-ln -sf ~/pmse src/mongo/db/modules/pmse
+cd src/mongo/db/modules/
+ln -sf ~/pmse pmse
 cd src/mongo/db/modules/pmse
 ls
 
