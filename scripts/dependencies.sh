@@ -1,4 +1,5 @@
 #!/bin/bash
+sudo apt-get install scons
 #sudo apt-get install pandoc
 #sudo apt-get install doxygen
 pwd
