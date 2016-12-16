@@ -6,7 +6,10 @@ sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
 sudo apt-get update -qq
 
 sudo apt-get install -qq g++-5
-export CXX="g++-5.3"
+sudo apt-get install -qq gcc-5
+gcc --version
+g++ --version
+
 
 #sudo apt-get install pandoc
 #sudo apt-get install doxygen
