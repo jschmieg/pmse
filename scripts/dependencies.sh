@@ -23,5 +23,6 @@ ls
 cd mongo/src/mongo/db/modules/pmse
 pwd
 ls
+cd ../../../../..
 
 
