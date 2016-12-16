@@ -21,10 +21,13 @@ g++ --version
 
 sudo apt-get install pandoc
 sudo apt-get install doxygen
+pwd
+ls
 git clone https://github.com/pmem/nvml.git
 cd nvml
 make
 sudo make install
+cd ..
 cd ..
 git clone https://github.com/mongodb/mongo.git
 cd mongo
