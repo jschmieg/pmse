@@ -1,5 +1,7 @@
 #!/bin/bash
-sudo apt-get install scons
+#sudo apt-get install scons
+wget http://mirrors.kernel.org/ubuntu/pool/main/s/scons/scons_2.3.0-2_all.deb
+sudo dpkg -i scons_2.3.0-2_all.deb
 #sudo apt-get install pandoc
 #sudo apt-get install doxygen
 pwd
