@@ -15,8 +15,12 @@ mkdir -p src/mongo/db/modules/
 pwd
 ls
 cd src/mongo/db/modules/
+pwd
+ls
 ln -sf ~/pmse pmse
+ls
 cd src/mongo/db/modules/pmse
+pwd
 ls
 
 
