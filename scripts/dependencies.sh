@@ -11,6 +11,9 @@ ls /usr/bin/ | grep g++
 ls /usr/bin/ | grep gcc
 gcc --version
 g++ --version
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-5 10
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-5 10
+
 sudo update-alternatives --set gcc "/usr/bin/gcc-5"
 sudo update-alternatives --set gcc "/usr/bin/g++-5"
 gcc --version
