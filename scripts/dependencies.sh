@@ -7,6 +7,8 @@ sudo apt-get update -qq
 
 sudo apt-get install -qq g++-5
 sudo apt-get install -qq gcc-5
+ls /usr/bin/ | grep g++
+ls /usr/bin/ | grep gcc
 gcc --version
 g++ --version
 
