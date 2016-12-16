@@ -1,4 +1,4 @@
 #!/bin/bash
 pwd
-cd mongo
+cd ../mongo
 scons LIBPATH=/usr/local/lib
