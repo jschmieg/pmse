@@ -3,4 +3,4 @@ sudo: required
 before_install:
   - ./scripts/dependencies.sh
 script:
-  - ./scripts/build.sh
+  - travis_wait 120 ./scripts/build.sh
