@@ -1,4 +1,4 @@
 #!/bin/bash
 pwd
 cd ../mongo
-scons LIBPATH=/usr/local/lib core
+scons -j3 LIBPATH=/usr/local/lib core
