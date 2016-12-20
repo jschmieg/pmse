@@ -88,6 +88,11 @@ void PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
 
                     while((key.woCompare(node->keys[i].getBSON(), _ordering, false)==0) && (node->values_array[i]).repr() != loc.repr())
                     {
+                        std::cout << "Remove2 i ="<< i << std::endl;
+                        if(i==0)
+                        {
+                            std::cout << "x";
+                        }
                         if(i>0)
                         {
                             i--;
@@ -103,9 +108,16 @@ void PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
                                 for (uint64_t j = 0; j < node->num_keys; j++) {
                                        std::cout << "print key[" << j << "] = "
                                                        << node->keys[j].getBSON().toString();
+                                       std::cout << "print value[" << j << "] = "
+                                                       << (node->values_array[j]).repr();
                                        std::cout << std::endl;
                                 }
 
+                            }
+                            else
+                            {
+                                std::cout << "Not found" << std::endl;;
+                                return;
                             }
                         }
                     }

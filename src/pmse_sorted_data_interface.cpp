@@ -864,6 +864,8 @@ public:
 
     boost::optional<IndexKeyEntry> seek(const IndexSeekPoint& seekPoint,
                                         RequestedInfo parts = kKeyAndLoc) {
+        std::cout << "seek2 = ";
+        std::cout << std::endl;
         return {};
     };
 
