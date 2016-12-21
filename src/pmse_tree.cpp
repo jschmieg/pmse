@@ -662,6 +662,11 @@ persistent_ptr<PmseTreeNode> PmseTree::remove_entry_from_node(
                         << node->children_array[i];
         std::cout << std::endl;
     }*/
+    BSONObj_PM bsonPM;
+
+    //for (i = 0; i < TREE_ORDER; i++) {
+        bsonPM = (node->keys[i]);
+        pmemobj_tx_free(bsonPM.data.raw());
 
     std::cout << "Num of keys = " << node->num_keys << std::endl;
     i = index;
@@ -675,6 +680,7 @@ persistent_ptr<PmseTreeNode> PmseTree::remove_entry_from_node(
     //TODO: forget last key
     //node->keys[i-1] = null;
 
+    //}
     // Remove the pointer and shift other pointers accordingly.
     i = index;
     if (node->is_leaf) {
@@ -773,7 +779,7 @@ inline persistent_ptr<PmseTreeNode> PmseTree::constructNewLeaf() {
 persistent_ptr<PmseTreeNode> PmseTree::makeTreeRoot(BSONObj_PM& key,
                                                     const RecordId& loc) {
     auto n = make_persistent<PmseTreeNode>(true);
-    n->keys[0] = key;
+    (n->keys[0]).data = key.data;
     n->values_array[0] = loc;
     n->num_keys = n->num_keys + 1;
     n->next = nullptr;
