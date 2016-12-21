@@ -934,6 +934,7 @@ PmseSortedDataInterface::PmseSortedDataInterface(
                         10 * PMEMOBJ_MIN_POOL, 0666);
     } else {
         pm_pool = pool<PmseTree>::open(filename.c_str(), "pmStore");
+        std::cout << " openPool = " << std::endl;
 
     }
     tree = pm_pool.get_root();
@@ -958,6 +959,7 @@ Status PmseSortedDataInterface::insert(OperationContext* txn,
                     [&] {
                         obj = pmemobj_tx_alloc(owned.objsize(), 1);
                         memcpy( (void*)obj.get(), owned.objdata(), owned.objsize());
+                        std::cout << "new BSON=" << obj.raw().off << std::endl;
 
                     });
     bsonPM.data = obj;
@@ -973,7 +975,13 @@ void PmseSortedDataInterface::unindex(OperationContext* txn,
                                          const RecordId& loc,
                                          bool dupsAllowed) {
     BSONObj owned = key.getOwned();
-    tree->remove(pm_pool, owned, loc, dupsAllowed, _desc->keyPattern());
+    try{
+        transaction::exec_tx(pm_pool, [&] {
+            tree->remove(pm_pool, owned, loc, dupsAllowed, _desc->keyPattern());
+        });
+    } catch (std::exception &e) {
+            std::cout << e.what() << std::endl;
+    }
 
 }
 

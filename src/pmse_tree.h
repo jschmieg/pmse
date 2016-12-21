@@ -80,13 +80,13 @@ struct PmseTreeNode {
     PmseTreeNode(bool node_leaf) :
                     num_keys(0) {
         uint64_t i;
-        keys = make_persistent<BSONObj_PM[TREE_ORDER]>();
+        //keys = make_persistent<BSONObj_PM[TREE_ORDER]>();
 
         if (node_leaf) {
             values_array = make_persistent<RecordId[TREE_ORDER]>();
-            for (i = 0; i < TREE_ORDER; i++) {
+            /*for (i = 0; i < TREE_ORDER; i++) {
                 values_array[i] = RecordId(i);
-            }
+            }*/
             is_leaf = true;
         } else {
             for (i = 0; i < TREE_ORDER; i++) {

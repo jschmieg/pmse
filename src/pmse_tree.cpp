@@ -138,9 +138,9 @@ void PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
     /*
      * Remove value
      */
-    transaction::exec_tx(pop, [&] {
+    //transaction::exec_tx(pop, [&] {
         root = delete_entry(key, node, i);
-    });
+    //});
     /*
      * Free value
      */
@@ -522,15 +522,22 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesce_nodes(
 
     root = delete_entry(k_prime_temp, n->parent, i);
 
+    BSONObj_PM bsonPM;
+
+    for (i = 0; i < TREE_ORDER; i++) {
+        bsonPM = (n->keys[i]);
+        pmemobj_tx_free(bsonPM.data.raw());
+
+    }
     delete_persistent<BSONObj_PM[TREE_ORDER]>(n->keys);
     if (n->is_leaf) {
         delete_persistent<RecordId[TREE_ORDER]>(n->values_array);
-    } else {
+    }// else {
         //delete_persistent<PmseTreeNode>(n->children_array)[TREE_ORDER + 1];
         for (i = 0; i < TREE_ORDER; i++) {
             delete_persistent<PmseTreeNode>(n->children_array[i]);
         }
-    }
+    //}
     delete_persistent<PmseTreeNode>(n);
 
 
@@ -595,26 +602,40 @@ persistent_ptr<PmseTreeNode> PmseTree::adjust_root(
     if (!root->is_leaf) {
         new_root = root->children_array[0];
         new_root->parent = nullptr;
+        std::cout << "New root = " << new_root.raw().off << std::endl;
+        std::cout << "New root Num of keys = " << new_root->num_keys << std::endl;
         for (uint64_t i = 0; i < new_root->num_keys; i++) {
             std::cout << "New root key[" << i << "]="
-                            << new_root->keys[0].getBSON().toString();
+                            << new_root->keys[i].getBSON().toString();
             std::cout << std::endl;
         }
+        return new_root;
     }
 
     // If it is a leaf (has no children),
     // then the whole tree is empty.
 
     else {
-        new_root = nullptr;
+        //new_root = nullptr;
+        //new_root = root;
         std::cout << "Empty root";
         std::cout << std::endl;
     }
 
+    BSONObj_PM bsonPM;
+
+    for (uint64_t i = 0; i < TREE_ORDER; i++) {
+        bsonPM = (root->keys[i]);
+        pmemobj_tx_free(bsonPM.data.raw());
+
+    }
+    for (uint64_t i = 0; i < TREE_ORDER; i++) {
+        delete_persistent<PmseTreeNode>(root->children_array[i]);
+    }
     delete_persistent<BSONObj_PM[TREE_ORDER]>(root->keys);
     delete_persistent<RecordId[TREE_ORDER]>(root->values_array);
-    delete_persistent<PmseTreeNode>(root);
 
+    delete_persistent<PmseTreeNode>(root);
     /*std::cout << "Removing: adjusting root: root=" << new_root.raw().off << std::endl;
     std::cout << "Removing: adjusting root: root num keys=" << new_root->num_keys << std::endl;
     for (uint64_t i=0; i < new_root->num_keys; i++) {
@@ -623,7 +644,7 @@ persistent_ptr<PmseTreeNode> PmseTree::adjust_root(
         std::cout << std::endl;
     }*/
 
-    return new_root;
+    return nullptr;
 
 }
 
@@ -704,8 +725,18 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKey(
     if (current == nullptr)
         return current;
     while (!current->is_leaf) {
+        std::cout << "locateLeafWithKey: leaf=" << current.raw().off << std::endl;
+        std::cout << "locateLeafWithKey: Num of keys = " << current->num_keys << std::endl;
+
+        for (i=0; i < current->num_keys; i++) {
+            std::cout << "key[" << i << "]= "
+                            << current->keys[i].getBSON().toString();
+            std::cout << std::endl;
+
+        }
         i = 0;
         while (i < current->num_keys) {
+
 
             cmp = key.woCompare(current->keys[i].getBSON(), _ordering, false);
             if (cmp > 0) {
@@ -1117,13 +1148,16 @@ Status PmseTree::insert(pool_base pop, BSONObj_PM& key, const RecordId& loc,
     if (!root)   //root not allocated yet
     {
         transaction::exec_tx(pop, [&] {
+
             root = makeTreeRoot(key,loc);
+            std::cout << "--------------------->Allocate new root<--------------------------"<< root.raw().off << std::endl;
             first = root;
             last = root;
         });
         return Status::OK();
     }
     node = locateLeafWithKeyPM(root, key, _ordering);
+    std::cout << "current: leaf=" << node.raw().off << std::endl;
     std::cout << "current: Num of keys = " << node->num_keys << std::endl;
 
     for (uint64_t i=0; i < node->num_keys; i++) {
