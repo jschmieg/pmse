@@ -955,6 +955,7 @@ Status PmseSortedDataInterface::insert(OperationContext* txn,
     persistent_ptr<char> obj;
 
     auto pop = pool_base(pm_pool);
+    try{
     transaction::exec_tx(pop,
                     [&] {
                         obj = pmemobj_tx_alloc(owned.objsize(), 1);
@@ -962,6 +963,9 @@ Status PmseSortedDataInterface::insert(OperationContext* txn,
                         std::cout << "new BSON=" << obj.raw().off << std::endl;
 
                     });
+    } catch (std::exception &e) {
+            std::cout << e.what() << std::endl;
+    }
     bsonPM.data = obj;
 
     return tree->insert(pop, bsonPM, loc, _desc->keyPattern(), dupsAllowed);
