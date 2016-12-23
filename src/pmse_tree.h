@@ -131,12 +131,14 @@ private:
     void placeBefore(PMEMobjpool *pm_pool, BSONObj& key, const RecordId& loc);
     int64_t get_neighbor_index(persistent_ptr<PmseTreeNode> node);
     persistent_ptr<PmseTreeNode> coalesce_nodes(
+                    pool_base pop,
                     persistent_ptr<PmseTreeNode> root,
                     persistent_ptr<PmseTreeNode> n,
                     persistent_ptr<PmseTreeNode> neighbor,
                     int64_t neighbor_index, BSONObj_PM k_prime);
 
     persistent_ptr<PmseTreeNode> redistribute_nodes(
+                    pool_base pop,
                     persistent_ptr<PmseTreeNode> root,
                     persistent_ptr<PmseTreeNode> n,
                     persistent_ptr<PmseTreeNode> neighbor,
@@ -178,7 +180,7 @@ private:
                     persistent_ptr<PmseTreeNode> old_node, uint64_t left_index,
                     BSONObj_PM& new_key, persistent_ptr<PmseTreeNode> right);
     persistent_ptr<PmseTreeNode> adjust_root(persistent_ptr<PmseTreeNode> root);
-    persistent_ptr<PmseTreeNode> delete_entry(BSONObj& key,
+    persistent_ptr<PmseTreeNode> delete_entry(pool_base pop, BSONObj& key,
                                               persistent_ptr<PmseTreeNode> node,
                                               uint64_t index);
 
