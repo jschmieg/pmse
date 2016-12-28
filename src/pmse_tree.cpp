@@ -284,7 +284,7 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
             neighbor->children_array[neighbor->num_keys] = nullptr;
             n->keys[0] = k_prime;
 
-            BSONObj_PM bsonPM;
+           /* BSONObj_PM bsonPM;
             persistent_ptr<char> obj;
             transaction::exec_tx(pop,
             [&] {
@@ -301,8 +301,8 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
                pmemobj_tx_free(bsonPM.data.raw());
             //return new_root;
 
-           bsonPM.data = obj;
-           n->parent->keys[k_prime_index] = bsonPM;
+           bsonPM.data = obj;*/
+           n->parent->keys[k_prime_index].data = neighbor->keys[neighbor->num_keys - 1].data;
         } else {
             n->values_array[0] = neighbor->values_array[neighbor->num_keys - 1];
             //neighbor->values_array[neighbor->num_keys - 1] = 0;
@@ -327,7 +327,9 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
 
            bsonPM.data = obj;
 
-           n->parent->keys[k_prime_index] = bsonPM;
+           //n->parent->keys[k_prime_index].data = n->keys[0].data;
+           n->parent->keys[k_prime_index].data = bsonPM.data;
+
         }
     }
 
@@ -362,7 +364,8 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
 
            bsonPM.data = obj;
 
-            n->parent->keys[k_prime_index] = bsonPM;
+            //n->parent->keys[k_prime_index].data = neighbor->keys[1].data;
+           n->parent->keys[k_prime_index].data = bsonPM.data;
         } else {
             n->keys[n->num_keys] = k_prime;
             n->children_array[n->num_keys + 1] = neighbor->children_array[0];
@@ -370,16 +373,21 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
             tmp->parent = n;
 
 
-            BSONObj_PM bsonPM;
+            /*BSONObj_PM bsonPM;
             persistent_ptr<char> obj;
-            transaction::exec_tx(pop,
-            [&] {
+            //transaction::exec_tx(pop,
+            //[&] {
                obj = pmemobj_tx_alloc(neighbor->keys[0].getBSON().objsize(), 1);
                memcpy( (void*)obj.get(), neighbor->keys[0].getBSON().objdata(), neighbor->keys[0].getBSON().objsize());
                std::cout << "new BSON in node redistribute=" << obj.raw().off << std::endl;
-            });
+            //});
 
 
+           std::cout << "Parent key= "<< (n->parent).raw().off;
+                       std::cout << std::endl;
+           std::cout << "Free parent key[" << k_prime_index << "]= "
+                                       << n->parent->keys[k_prime_index].getBSON().toString();
+                       std::cout << std::endl;
 
            bsonPM = (n->parent->keys[k_prime_index]);
            std::cout << "redistribute_nodes: free n=" << bsonPM.data.raw().off << std::endl;
@@ -387,10 +395,10 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
                pmemobj_tx_free(bsonPM.data.raw());
             //return new_root;
 
-           bsonPM.data = obj;
+           bsonPM.data = obj;*/
 
 
-           n->parent->keys[k_prime_index] = bsonPM;
+           n->parent->keys[k_prime_index].data = neighbor->keys[0].data;
         }
         if (!n->is_leaf)
         {
@@ -519,8 +527,16 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesce_nodes(
 
         /* Append k_prime.
          */
+        BSONObj_PM bsonPM;
+        persistent_ptr<char> obj;
 
-        neighbor->keys[neighbor_insertion_index] = k_prime;
+        obj = pmemobj_tx_alloc(k_prime.getBSON().objsize(), 1);
+        memcpy( (void*)obj.get(), k_prime.getBSON().objdata(), k_prime.getBSON().objsize());
+        std::cout << "new BSON in node coalense=" << obj.raw().off << std::endl;
+
+        bsonPM.data = obj;
+        neighbor->keys[neighbor_insertion_index].data = bsonPM.data;
+        //neighbor->keys[neighbor_insertion_index] = k_prime;
         neighbor->num_keys++;
 
         n_end = n->num_keys;

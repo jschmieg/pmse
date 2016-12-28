@@ -931,7 +931,7 @@ PmseSortedDataInterface::PmseSortedDataInterface(
 
     if (access(filename.c_str(), F_OK) != 0) {
         pm_pool = pool<PmseTree>::create(filename.c_str(), "pmStore",
-                        10 * PMEMOBJ_MIN_POOL, 0666);
+                        1 * PMEMOBJ_MIN_POOL, 0666);
     } else {
         pm_pool = pool<PmseTree>::open(filename.c_str(), "pmStore");
         std::cout << " openPool = " << std::endl;
@@ -960,6 +960,9 @@ Status PmseSortedDataInterface::insert(OperationContext* txn,
                     [&] {
                         obj = pmemobj_tx_alloc(owned.objsize(), 1);
                         memcpy( (void*)obj.get(), owned.objdata(), owned.objsize());
+                        std::cout << "Insert key ="
+                                        << key.toString();
+                        std::cout <<  std::endl;
                         std::cout << "new BSON=" << obj.raw().off << std::endl;
 
                     });
