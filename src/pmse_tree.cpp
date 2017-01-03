@@ -66,6 +66,11 @@ void PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
     for (i = 0; i < node->num_keys; i++) {
         std::cout << "print key[" << i << "] = "
                         << node->keys[i].getBSON().toString();
+
+        std::cout << "key offset[" << i << "]= "
+                                << node->keys[i].data.raw().off;
+
+
         key_record = node->values_array[i];
         std::cout << " recordID = " << key_record.repr();
         //std::cout << std::endl;
@@ -164,6 +169,10 @@ persistent_ptr<PmseTreeNode> PmseTree::delete_entry(
         std::cout << "key[" << i << "]= "
                         << node->keys[i].getBSON().toString();
         std::cout << std::endl;
+
+        std::cout << "key offset[" << i << "]= "
+                                << node->keys[i].data.raw().off;
+                std::cout << std::endl;
     }
 
     node = remove_entry_from_node(key, node, index);
@@ -175,6 +184,10 @@ persistent_ptr<PmseTreeNode> PmseTree::delete_entry(
         std::cout << "key[" << i << "]= "
                         << node->keys[i].getBSON().toString();
         std::cout << std::endl;
+
+        std::cout << "key offset[" << i << "]= "
+                                << node->keys[i].data.raw().off;
+                std::cout << std::endl;
     }
 
     if (node == root) {
@@ -254,6 +267,10 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
                         << n->keys[i].getBSON().toString();
         std::cout << std::endl;
 
+        std::cout << "key offset[" << i << "]= "
+                                << n->keys[i].data.raw().off;
+                std::cout << std::endl;
+
     }
     std::cout << "Removing: Redistribute: neighbor=" << neighbor.raw().off << std::endl;
     std::cout << "neighbor: Num of keys = " << neighbor->num_keys << std::endl;
@@ -262,6 +279,10 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
         std::cout << "key[" << i << "]= "
                         << neighbor->keys[i].getBSON().toString();
         std::cout << std::endl;
+
+        std::cout << "key offset[" << i << "]= "
+                                << neighbor->keys[i].data.raw().off;
+                std::cout << std::endl;
     }
 
     if (neighbor_index != -1) {
@@ -396,7 +417,9 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
             //return new_root;
 
            bsonPM.data = obj;*/
-
+            BSONObj_PM bsonPM;
+            bsonPM = (n->parent->keys[k_prime_index]);
+            std::cout << "redistribute_nodes: replacing parent key=" << bsonPM.data.raw().off << std::endl;
 
            n->parent->keys[k_prime_index].data = neighbor->keys[0].data;
         }
@@ -441,6 +464,10 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
                             << n->keys[i].getBSON().toString();
             std::cout << std::endl;
 
+            std::cout << "key offset[" << i << "]= "
+                                    << n->keys[i].data.raw().off;
+                    std::cout << std::endl;
+
         }
         std::cout << "Removing: Redistribute: neighbor=" << neighbor.raw().off << std::endl;
         std::cout << "neighbor: Num of keys = " << neighbor->num_keys << std::endl;
@@ -449,6 +476,10 @@ persistent_ptr<PmseTreeNode> PmseTree::redistribute_nodes(
             std::cout << "key[" << i << "]= "
                             << neighbor->keys[i].getBSON().toString();
             std::cout << std::endl;
+
+            std::cout << "key offset[" << i << "]= "
+                                    << neighbor->keys[i].data.raw().off;
+                    std::cout << std::endl;
         }
 
     return root;
@@ -480,6 +511,10 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesce_nodes(
                         << root->keys[i].getBSON().toString();
         std::cout << std::endl;
 
+        std::cout << "key offset[" << i << "]= "
+                                << root->keys[i].data.raw().off;
+                std::cout << std::endl;
+
     }
 
     std::cout << "n: Num of keys = " << n->num_keys << std::endl;
@@ -489,6 +524,10 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesce_nodes(
                         << n->keys[i].getBSON().toString();
         std::cout << std::endl;
 
+        std::cout << "key offset[" << i << "]= "
+                                << n->keys[i].data.raw().off;
+                std::cout << std::endl;
+
     }
 
     std::cout << "neighbor: Num of keys = " << neighbor->num_keys << std::endl;
@@ -497,6 +536,10 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesce_nodes(
         std::cout << "key[" << i << "]= "
                         << neighbor->keys[i].getBSON().toString();
         std::cout << std::endl;
+
+        std::cout << "key offset[" << i << "]= "
+                                << neighbor->keys[i].data.raw().off;
+                std::cout << std::endl;
 
     }
 
@@ -851,6 +894,10 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKey(
                             << current->keys[i].getBSON().toString();
             std::cout << std::endl;
 
+            std::cout << "key offset[" << i << "]= "
+                                    << current->keys[i].data.raw().off;
+                    std::cout << std::endl;
+
         }
         i = 0;
         while (i < current->num_keys) {
@@ -1168,6 +1215,14 @@ persistent_ptr<PmseTreeNode> PmseTree::insertToNodeAfterSplit(
         old_node->keys[i] = temp_keys_array[i];
         old_node->num_keys = old_node->num_keys + 1;
     }
+
+    BSONObj_PM bsonPM;
+
+    bsonPM = old_node->keys[split-1];
+    std::cout << "insertToNodeAfterSplit: free n=" << bsonPM.data.raw().off << std::endl;
+    if(bsonPM.data.raw().off!=0)
+       pmemobj_tx_free(bsonPM.data.raw());
+
     old_node->children_array[i] = temp_children_array[i];
     k_prime = temp_keys_array[split - 1];
 
@@ -1182,6 +1237,22 @@ persistent_ptr<PmseTreeNode> PmseTree::insertToNodeAfterSplit(
         child = new_node->children_array[i];
         child->parent = new_node;
     }
+
+
+    std::cout << "Inserting into node after splitting: old_node=" << old_node.raw().off << std::endl;
+    for (uint64_t i=0; i < old_node->num_keys; i++) {
+        std::cout << "old_node key[" << i << "]= "
+                        << old_node->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
+
+    std::cout << "Inserting into node after splitting: new_node=" << new_node.raw().off << std::endl;
+    for (uint64_t i=0; i < new_node->num_keys; i++) {
+        std::cout << "new_node key[" << i << "]= "
+                        << new_node->keys[i].getBSON().toString();
+        std::cout << std::endl;
+    }
+
     new_root = insertIntoNodeParent(pop, root, old_node, k_prime, new_node);
 
     std::cout << "Inserting into node after splitting: new_root=" << new_root.raw().off << std::endl;

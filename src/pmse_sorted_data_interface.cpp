@@ -91,6 +91,9 @@ public:
                     std::cout << "key[" << i << "]= "
                                     << current->keys[i].getBSON().toString();
                     std::cout << std::endl;
+                    std::cout << "key offset[" << i << "]= "
+                                            << current->keys[i].data.raw().off;
+                    std::cout << std::endl;
 
                 }
                 /*std::cout << "current: iterating through node" << current.raw().off << std::endl;
@@ -602,6 +605,15 @@ public:
                                         bool inclusive,
                                         RequestedInfo parts = kKeyAndLoc) {
         uint64_t i = 0;
+
+        /*PMEMoid p = pmemobj_first()
+        while(1)
+        {
+
+            break;
+        }*/
+
+
         int cmp;
 
         _returnValue = {};
@@ -931,13 +943,15 @@ PmseSortedDataInterface::PmseSortedDataInterface(
 
     if (access(filename.c_str(), F_OK) != 0) {
         pm_pool = pool<PmseTree>::create(filename.c_str(), "pmStore",
-                        1 * PMEMOBJ_MIN_POOL, 0666);
+                        10 * PMEMOBJ_MIN_POOL, 0666);
     } else {
         pm_pool = pool<PmseTree>::open(filename.c_str(), "pmStore");
         std::cout << " openPool = " << std::endl;
 
     }
     tree = pm_pool.get_root();
+
+
 }
 
 
@@ -949,8 +963,29 @@ Status PmseSortedDataInterface::insert(OperationContext* txn,
                                           const BSONObj& key,
                                           const RecordId& loc,
                                           bool dupsAllowed) {
-    BSONObj owned = key.getOwned();
+
+    /*
+     * Debug only
+     */
+    PMEMoid p;
+
+    p = pmemobj_first(pm_pool.get_handle());
+    if(p.off!=0)
+    {
+        std::cout << "-------> Iterating in pool start: p=" << p.off << std::endl;
+    }
+    /*while(p.off!=0)
+    {
+
+        std::cout << "-------> p=" << p.off << std::endl;
+        p = pmemobj_next(p);
+    }*/
+    std::cout << "-------> Iterating in pool end" << std::endl;
+
+
     BSONObj_PM bsonPM;
+    BSONObj owned = key.getOwned();
+
 
     persistent_ptr<char> obj;
 
