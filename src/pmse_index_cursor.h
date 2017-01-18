@@ -50,11 +50,11 @@ public:
                                         RequestedInfo parts);
     boost::optional<IndexKeyEntry> seekExact(const BSONObj& key,
                                              RequestedInfo parts);
-    void save();
+    void save() override final;
 
-    void saveUnpositioned();
+    void saveUnpositioned() override final;
 
-    void restore();
+    void restore() override final;
 
     void detachFromOperationContext();
 

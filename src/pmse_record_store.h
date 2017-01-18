@@ -33,7 +33,6 @@
 #ifndef SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_RECORD_STORE_H_
 #define SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_RECORD_STORE_H_
 
-#include <cmath>
 
 #include "libpmem.h"
 #include "libpmemobj.h"
@@ -197,7 +196,7 @@ public:
                                    BSONObjBuilder* result, double scale) const {
         if(mapper->isCapped()) {
             result->appendNumber("capped", true);
-            result->appendNumber("maxSize", floor(mapper->getMax() / scale));
+            result->appendNumber("maxSize", mapper->getMax() / scale);
             result->appendNumber("max", mapper->getMaxSize());
         } else {
             result->appendNumber("capped", false);

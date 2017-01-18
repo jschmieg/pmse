@@ -150,8 +150,6 @@ public:
     }
 
     uint64_t fillment() {
-        if(_isCapped)
-            return _list[0]->size();
         return _hashmapSize;
     }
 
@@ -167,6 +165,8 @@ public:
             });
             _counter = 0;
             _hashmapSize = 0;
+            _maxDocuments = 0;
+            _sizeOfCollection = 0;
             _counterCapped = 0;
             _dataSize = 0;
         } catch (nvml::transaction_alloc_error &e) {

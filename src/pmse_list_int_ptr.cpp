@@ -88,17 +88,18 @@ void PmseListIntPtr::insertKV_capped(persistent_ptr<KVPair> &key,
             key->next = nullptr;
 
             isFullCapped = false;
+            size_t pair_size = pmemobj_alloc_usable_size(key.raw());
             size_t value_size = pmemobj_alloc_usable_size(value.raw());
-            uint64_t tempSize = actualSizeOfCollecion + value_size;
+            uint64_t tempSize = actualSizeOfCollecion + pair_size + value_size;
 
             if(tempSize >= sizeOfColl) {
                 if((tempSize - (pmemobj_alloc_usable_size(head.raw()) + sizeOfFirstData)) > sizeOfColl)
                     isSpace = BLOCKED;
                 else
                     isSpace = NO;
-            } else {
-                isSpace = YES;
             }
+            else
+                isSpace = YES;
 
             if(head != nullptr) {
                 if(_size == maxDoc || isSpace == NO) {
@@ -113,7 +114,7 @@ void PmseListIntPtr::insertKV_capped(persistent_ptr<KVPair> &key,
                     }
 
                     actualSizeOfCollecion -= (sizeOfFirstData + pmemobj_alloc_usable_size(head.raw()))
-                                     + value_size;
+                                    + pair_size + value_size;
 
                     if(!isFullCapped)
                         isFullCapped = true;

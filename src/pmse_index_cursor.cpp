@@ -57,6 +57,9 @@ PmseCursor::PmseCursor(OperationContext* txn, bool isForward,
     BSONObjBuilder maxBob;
     maxBob.append("", std::numeric_limits<double>::infinity());
     max = maxBob.obj();
+
+    std::cout << this << " New Index cursor = ";
+    std::cout << std::endl;
 }
 
 /*
@@ -302,7 +305,8 @@ boost::optional<IndexKeyEntry> PmseCursor::next(
     /*
      * Advance cursor in leaves
      */
-
+    std::cout << this << " Index next";
+    std::cout << std::endl;
     if (!_tree->root) {
         return boost::none;
     }
@@ -714,12 +718,18 @@ boost::optional<IndexKeyEntry> PmseCursor::seekExact(
 }
 
 void PmseCursor::save() {
+    std::cout << this << " Index save ";
+    std::cout << std::endl;
 }
 
 void PmseCursor::saveUnpositioned() {
+    std::cout << this << " Index save unpositioned ";
+    std::cout << std::endl;
 }
 
 void PmseCursor::restore() {
+    std::cout << this << " Index restore ";
+    std::cout << std::endl;
 }
 
 void PmseCursor::detachFromOperationContext() {

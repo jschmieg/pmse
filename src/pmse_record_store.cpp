@@ -156,6 +156,8 @@ Status PmseRecordStore::updateRecord(
 
 void PmseRecordStore::deleteRecord(OperationContext* txn,
                                       const RecordId& dl) {
+    std::cout << this << " Record Store delete record";
+    std::cout << std::endl;
     mapper->remove((uint64_t) dl.repr());
 }
 
@@ -177,9 +179,13 @@ bool PmseRecordStore::findRecord(OperationContext* txn, const RecordId& loc,
 PmseRecordCursor::PmseRecordCursor(persistent_ptr<PmseMap<InitData>> mapper) {
     _mapper = mapper;
     _cur = nullptr;
+    std::cout << this << " Record Store new ";
+    std::cout << std::endl;
 }
 
 boost::optional<Record> PmseRecordCursor::next() {
+    std::cout << this << " Record Store next ";
+    std::cout << std::endl;
     if(_eof)
         return boost::none;
     if(_cur != nullptr) {
@@ -230,6 +236,8 @@ boost::optional<Record> PmseRecordCursor::seekExact(const RecordId& id) {
 }
 
 void PmseRecordCursor::save() {
+    std::cout << this << " Record Store save ";
+    std::cout << std::endl;
     auto temp = _cur;
     auto row = actual;
     if(temp != nullptr) {
@@ -259,6 +267,8 @@ void PmseRecordCursor::save() {
 }
 
 bool PmseRecordCursor::restore() {
+    std::cout << this << " Record Store restore ";
+    std::cout << std::endl;
     if(_eof)
         return true;
     if(_restorePoint == nullptr) {

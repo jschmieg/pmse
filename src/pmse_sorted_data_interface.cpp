@@ -91,6 +91,8 @@ Status PmseSortedDataInterface::insert(OperationContext* txn,
  */
 void PmseSortedDataInterface::unindex(OperationContext* txn, const BSONObj& key,
                                       const RecordId& loc, bool dupsAllowed) {
+    std::cout << this << " unindex = " << loc.repr();
+    std::cout << std::endl;
     BSONObj owned = key.getOwned();
     try {
         transaction::exec_tx(pm_pool,
@@ -101,7 +103,8 @@ void PmseSortedDataInterface::unindex(OperationContext* txn, const BSONObj& key,
     } catch (std::exception &e) {
         std::cout << e.what() << std::endl;
     }
-
+    std::cout << this << " unindex = " << loc.repr() << "end";
+    std::cout << std::endl;
 }
 
 std::unique_ptr<SortedDataInterface::Cursor> PmseSortedDataInterface::newCursor(
