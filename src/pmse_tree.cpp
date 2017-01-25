@@ -215,7 +215,11 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
 
             bsonPM = (n->parent->keys[k_prime_index]);
             if (bsonPM.data.raw().off != 0)
-                pmemobj_tx_free(bsonPM.data.raw());
+                {
+                    pmemobj_tx_free(bsonPM.data.raw());
+                    std::cout<<"redistributeNodes free="<<bsonPM.data.raw().off;
+                    std::cout << std::endl;
+                }
 
             bsonPM.data = obj;
             n->parent->keys[k_prime_index].data = bsonPM.data;
@@ -244,7 +248,11 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
 
             bsonPM = (n->parent->keys[k_prime_index]);
             if (bsonPM.data.raw().off != 0)
-                pmemobj_tx_free(bsonPM.data.raw());
+                {
+                    pmemobj_tx_free(bsonPM.data.raw());
+                    std::cout<<"redistributeNodes free="<<bsonPM.data.raw().off;
+                    std::cout << std::endl;
+                }
 
             bsonPM.data = obj;
 
@@ -281,10 +289,10 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
     n->num_keys++;
     neighbor->num_keys--;
 
-    if (_cursor.node == neighbor) {
+    /*if (_cursor.node == neighbor) {
         _cursor.node = n;
         _cursor.index = 0;
-    }
+    }*/
 
     return root;
 }
@@ -394,10 +402,10 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesceNodes(
         }
     }
 
-    if (_cursor.node == n) {
+   /* if (_cursor.node == n) {
         _cursor.node = neighbor;
         _cursor.index = 0;
-    }
+    }*/
 
     root = deleteEntry(pop, k_prime_temp, n->parent, i);
 
@@ -405,6 +413,10 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesceNodes(
     if (n->is_leaf) {
         delete_persistent<RecordId[TREE_ORDER]>(n->values_array);
     }
+
+    std::cout<<"coalesceNodes free="<<n.raw().off;
+    std::cout << std::endl;
+
     delete_persistent<PmseTreeNode>(n);
 
     return root;
@@ -472,7 +484,10 @@ persistent_ptr<PmseTreeNode> PmseTree::adjustRoot(
     delete_persistent<BSONObj_PM[TREE_ORDER]>(root->keys);
     delete_persistent<RecordId[TREE_ORDER]>(root->values_array);
 
+    std::cout<<"adjustRoot free="<<root.raw().off;
+    std::cout << std::endl;
     delete_persistent<PmseTreeNode>(root);
+
     return new_root;
 
 }
@@ -482,12 +497,21 @@ persistent_ptr<PmseTreeNode> PmseTree::removeEntryFromNode(
                 uint64_t index) {
     uint64_t i, num_pointers;
     // Remove the key and shift other keys accordingly.
+
+    for (i = 0; i < node->num_keys; i++) {
+        std::cout << "removeEntryFromNode node["<< i <<"]=" << node->keys[i].getBSON().toString();//  << "value = " << node->values_array[i];
+        std::cout << std::endl;
+    }
+    std::cout << "index = " << index;
+    std::cout << std::endl;
     i = index;
 
     BSONObj_PM bsonPM;
     bsonPM = (node->keys[i]);
+    /*std::cout<<"removeEntryFromNode free="<<bsonPM.data.raw().off;
+    std::cout << std::endl;
     pmemobj_tx_free(bsonPM.data.raw());
-
+*/
     i = index;
     for (++i; i < node->num_keys; i++) {
         node->keys[i - 1] = node->keys[i];
@@ -795,7 +819,11 @@ persistent_ptr<PmseTreeNode> PmseTree::insertToNodeAfterSplit(
 
     bsonPM = old_node->keys[split - 1];
     if (bsonPM.data.raw().off != 0)
-        pmemobj_tx_free(bsonPM.data.raw());
+        {
+            pmemobj_tx_free(bsonPM.data.raw());
+            std::cout<<"insertToNodeAfterSplit free="<<bsonPM.data.raw().off;
+            std::cout << std::endl;
+        }
 
     old_node->children_array[i] = temp_children_array[i];
     k_prime = temp_keys_array[split - 1];
