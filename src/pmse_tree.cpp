@@ -1216,13 +1216,13 @@ persistent_ptr<PmseTreeNode> PmseTree::insertToNodeAfterSplit(
         old_node->num_keys = old_node->num_keys + 1;
     }
 
-    BSONObj_PM bsonPM;
+    /*BSONObj_PM bsonPM;
 
     bsonPM = old_node->keys[split-1];
     std::cout << "insertToNodeAfterSplit: free n=" << bsonPM.data.raw().off << std::endl;
     if(bsonPM.data.raw().off!=0)
        pmemobj_tx_free(bsonPM.data.raw());
-
+*/
     old_node->children_array[i] = temp_children_array[i];
     k_prime = temp_keys_array[split - 1];
 
@@ -1263,6 +1263,15 @@ persistent_ptr<PmseTreeNode> PmseTree::insertToNodeAfterSplit(
                         << new_root->keys[i].getBSON().toString();
         std::cout << std::endl;
     }
+
+    BSONObj_PM bsonPM;
+
+    bsonPM = temp_keys_array[split-1];
+    std::cout << "insertToNodeAfterSplit: free n=" << bsonPM.data.raw().off << std::endl;
+    if(bsonPM.data.raw().off!=0)
+       pmemobj_tx_free(bsonPM.data.raw());
+
+
 
     return new_root;
 }
