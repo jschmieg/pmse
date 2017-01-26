@@ -50,32 +50,39 @@
 
 namespace mongo {
 
-Status Pmse::createRecordStore(OperationContext* opCtx, StringData ns, StringData ident,
-                                  const CollectionOptions& options) {
-    identList->insertKV(ident.toString().c_str(), ns.toString().c_str());
-    return Status::OK();
+Status PmseEngine::createRecordStore(OperationContext* opCtx, StringData ns, StringData ident,
+                                     const CollectionOptions& options) {
+    auto status = Status::OK();
+    try {
+        auto record_store = stdx::make_unique<PmseRecordStore>(ns, options, _DBPATH);
+        identList->insertKV(ident.toString().c_str(), ns.toString().c_str());
+
+    } catch(std::exception &e) {
+        status = Status(ErrorCodes::BadValue, e.what());
+    }
+    return status;
 }
 
-std::unique_ptr<RecordStore> Pmse::getRecordStore(OperationContext* opCtx,
-                                     StringData ns,
-                                     StringData ident,
-                                     const CollectionOptions& options) {
+std::unique_ptr<RecordStore> PmseEngine::getRecordStore(OperationContext* opCtx,
+                                                        StringData ns,
+                                                        StringData ident,
+                                                        const CollectionOptions& options) {
     return stdx::make_unique<PmseRecordStore>(ns, options, _DBPATH);
 }
 
-Status Pmse::createSortedDataInterface(OperationContext* opCtx,
-                                         StringData ident,
-                                         const IndexDescriptor* desc) {
+Status PmseEngine::createSortedDataInterface(OperationContext* opCtx,
+                                             StringData ident,
+                                             const IndexDescriptor* desc) {
     return Status::OK();
 }
 
-SortedDataInterface* Pmse::getSortedDataInterface(OperationContext* opCtx,
-                                                     StringData ident,
-                                                     const IndexDescriptor* desc) {
-    return new PmseSortedDataInterface(ident,desc, _DBPATH);
+SortedDataInterface* PmseEngine::getSortedDataInterface(OperationContext* opCtx,
+                                                        StringData ident,
+                                                        const IndexDescriptor* desc) {
+    return new PmseSortedDataInterface(ident, desc, _DBPATH);
 }
 
-Status Pmse::dropIdent(OperationContext* opCtx, StringData ident) {
+Status PmseEngine::dropIdent(OperationContext* opCtx, StringData ident) {
     bool status;
     boost::filesystem::path path(_DBPATH);
     const char* ns = identList->find(ident.toString().c_str(), status);

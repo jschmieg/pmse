@@ -46,122 +46,209 @@
 #include <libpmemobj++/pool.hpp>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_array.hpp>
+#include <libpmemobj++/detail/pexceptions.hpp>
 
 using namespace nvml::obj;
 
 namespace mongo {
 
-const uint64_t HASHTABLE_SIZE = 1000;
 const uint64_t CAPPED_SIZE = 1;
-
-
+const uint64_t HASHMAP_SIZE = 1000;
 class PmseRecordCursor;
 
 template<typename T>
 class PmseMap {
-	friend PmseRecordCursor;
+    friend PmseRecordCursor;
 public:
-	PmseMap() = default;
-	PmseMap(bool isCapped, p<uint64_t> maxDoc, p<uint64_t> sizeOfColl) :
-				_size(isCapped ? CAPPED_SIZE : HASHTABLE_SIZE) {
-		this->isCapped = isCapped;
-		maxDocuments = maxDoc;
-		sizeOfCollection = sizeOfColl;
-		list = make_persistent<persistent_ptr<PmseListIntPtr>[]>(_size);
-	}
+    PmseMap() = default;
 
-	~PmseMap() = default;
+    PmseMap(bool isCapped, uint64_t maxDoc, uint64_t sizeOfColl, uint64_t size = HASHMAP_SIZE)
+            : _size(isCapped ? CAPPED_SIZE : size), _isCapped(isCapped) {
+        _maxDocuments = maxDoc;
+        _sizeOfCollection = sizeOfColl;
+        try {
+            _list = make_persistent<persistent_ptr<PmseListIntPtr>[]>(_size);
+        } catch (std::exception &e) {
+            std::cout << "PmseMap: " << e.what() << std::endl;
+        }
+    }
 
-	uint64_t insert(persistent_ptr<T> value) {
-		uint64_t id = getNextId();
-		if (!insertKV(id, value)) {
-			return -1;
-		}
-		hashmapSize++;
-		return id;
-	}
+    ~PmseMap() = default;
 
-	bool insertKV(int id, persistent_ptr<T> value) { //internal use
-		if (isCapped) {
-			if (!hasId(id)) {
-				list[id % _size]->insertKV_capped(id, value, isCapped,
-						maxDocuments, sizeOfCollection);
-			} else
-				return false;
-		} else {
-			if (!hasId(id)) {
-				list[id % _size]->insertKV(id, value);
-			} else {
-				return false;
-			}
-		}
-		return true; //correctly added
-	}
+    uint64_t insert(persistent_ptr<T> value) {
+        auto id = getNextId();
+        if (!insertKV(id, value)) {
+            return -1;
+        }
+        _hashmapSize++;
+        return id->idValue;
+    }
 
-	bool updateKV(uint64_t id, persistent_ptr<T> value) {
-		if (hasId(id)) {
-			list[id % _size]->update(id, value);
-		} else {
-			return false;
-		}
-		return true;
-	}
+    uint64_t getCappedFirstId() {
+        if(isCapped())
+            return getFirstPtr(0)->idValue;
+        return 0;
+    }
 
-	bool hasId(uint64_t id) {
-		return list[id % _size]->hasKey(id);
-	}
+    bool removalIsNeeded() {
+        if(isCapped()) {
+            if (_list[0]->actualSizeOfCollecion > _sizeOfCollection) //size exceed
+                return true;
+            if ((_maxDocuments != 0) && (_list[0]->_size > _maxDocuments)) //number of items exceed
+                return true;
+        }
+        return false;
+    }
 
-	bool find(uint64_t id, persistent_ptr<T> *value) {
-		persistent_ptr<InitData> obj;
-		if (list[id % _size]->find(id, obj)) {
-			*value = obj;
-			return true;
-		}
-		*value = nullptr;
-		return false;
-	}
+    bool insertKV(persistent_ptr<KVPair> &id, persistent_ptr<T> value) { //internal use
+        if (!hasId(id->idValue)) {
+            _list[id->idValue % _size]->insertKV(id, value);
+        } else {
+            return false;
+        }
+        _dataSize += pmemobj_alloc_usable_size(value.raw());
+        return true; //correctly added
+    }
 
-	bool remove(uint64_t id) {
-		list[id % _size]->deleteKV(id);
-		hashmapSize--;
-		return true;
-	}
+    bool updateKV(uint64_t id, persistent_ptr<T> value) {
+        persistent_ptr<T> temp;
+        if (find(id, temp)) {
+            _list[id % _size]->update(id, value);
+            _dataSize += pmemobj_alloc_usable_size(value.raw()) - pmemobj_alloc_usable_size(temp.raw());
+        } else {
+            return false;
+        }
+        return true;
+    }
 
-	void initialize(bool firstRun) {
-		for (int i = 0; i < _size; i++) {
-			if (firstRun)
-				list[i] = make_persistent<PmseListIntPtr>();
-			list[i]->setPool();
-		}
-	}
+    bool hasId(uint64_t id) {
+        return _list[id % _size]->hasKey(id);
+    }
 
-	void deinitialize() {
-		//TODO: deallocate all resources
-	}
+    bool find(uint64_t id, persistent_ptr<T> &value) {
+        return _list[id % _size]->find(id, value);
+    }
 
-	uint64_t fillment() {
-		return hashmapSize;
-	}
+    bool getPair(uint64_t id, persistent_ptr<KVPair> &value) {
+        return _list[id % _size]->getPair(id, value);
+    }
 
+    bool remove(uint64_t id) {
+        persistent_ptr<T> temp;
+        if(find(id, temp))
+            _dataSize -= pmemobj_alloc_usable_size(temp.raw());
+        _list[id % _size]->deleteKV(id, _deleted);
+        _hashmapSize--;
+        return true;
+    }
+
+    void initialize(bool firstRun) {
+        pop = pool_by_vptr(this);
+        for(int i = 0; i < _size; i++) {
+            if (firstRun) {
+                try {
+                    _list[i] = make_persistent<PmseListIntPtr>();
+                } catch(std::exception &e) {
+                    std::cout << e.what() << std::endl;
+                }
+            }
+            _list[i]->setPool();
+        }
+    }
+
+    void deinitialize() {
+        //TODO: deallocate all resources
+    }
+
+    uint64_t fillment() {
+        if(_isCapped)
+            return _list[0]->size();
+        return _hashmapSize;
+    }
+
+    bool truncate() {
+        bool status = true;
+        try {
+            transaction::exec_tx(pop, [&] {
+                for(int i = 0; i < _size; i++) {
+                    _list[i]->clear();
+                    delete_persistent<PmseListIntPtr>(_list[i]);
+                }
+                initialize(true);
+            });
+            _counter = 0;
+            _hashmapSize = 0;
+            _counterCapped = 0;
+            _dataSize = 0;
+        } catch (nvml::transaction_alloc_error &e) {
+            std::cout << e.what() << std::endl;
+            status = false;
+        } catch (nvml::transaction_scope_error &e) {
+            std::cout << e.what() << std::endl;
+            status = false;
+        }
+        return status;
+    }
+
+    int64_t dataSize() {
+        return _dataSize;
+    }
+
+    bool isCapped() const {
+        return _isCapped;
+    }
+
+    uint64_t getMax() const {
+        return _sizeOfCollection;
+    }
+
+    uint64_t getMaxSize() const {
+        return _maxDocuments;
+    }
 private:
-	p<uint64_t> counter = 0;
-	p<uint64_t> hashmapSize = 0;
-	const int _size;
-	persistent_ptr<persistent_ptr<PmseListIntPtr>[]> list;
+    const int _size;
+    const bool _isCapped;
+    pool_base pop;
+    p<int64_t> _dataSize = 0;
+    p<uint64_t> _counter = 0;
+    p<uint64_t> _hashmapSize = 0;
+    p<uint64_t> _maxDocuments;
+    p<uint64_t> _sizeOfCollection;
+    p<uint64_t> _counterCapped = 0;
+    persistent_ptr<persistent_ptr<PmseListIntPtr>[]> _list;
+    persistent_ptr<KVPair> _deleted;
 
-	persistent_ptr<KVPair> getFirstPtr(int listNumber) {
-		if (listNumber < _size)
-			return list[listNumber]->head;
-		return {};
-	}
-	uint64_t getNextId() {
-		this->counter++;
-		return counter;
-	}
-	bool isCapped;
-	p<uint64_t> maxDocuments;
-	p<uint64_t> sizeOfCollection;
-	p<uint64_t> counterCapped = 0;
+    persistent_ptr<KVPair> getFirstPtr(int listNumber) {
+        if (listNumber < _size)
+            return _list[listNumber]->head;
+        return {};
+    }
+
+    persistent_ptr<KVPair> getNextId() {
+        persistent_ptr<KVPair> temp = nullptr;
+        if(_deleted == nullptr) {
+            if(_counter != std::numeric_limits<uint64_t>::max()-1) {
+                this->_counter++;
+                try {
+                    transaction::exec_tx(pop, [&] {
+                        temp = make_persistent<KVPair>();
+                        temp->idValue = _counter;
+                    });
+                } catch (std::exception &e) {
+                    std::cout << "Next id generation: " << e.what() << std::endl;
+                }
+            } else {
+                return nullptr;
+            }
+        } else {
+            temp = _deleted;
+            uint64_t id = 0;
+            id = _deleted->idValue;
+            _deleted = _deleted->next;
+            return temp;
+        }
+        return temp;
+    }
 };
 }
 #endif /* SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_MAP_H_ */

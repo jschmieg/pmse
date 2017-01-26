@@ -54,7 +54,7 @@ namespace mongo {
 PmseRecordStore::PmseRecordStore(StringData ns,
                                        const CollectionOptions& options,
                                        StringData dbpath) :
-                RecordStore(ns), _options(options), _DBPATH(dbpath) {
+                RecordStore(ns), _cappedCallback(nullptr), _options(options), _DBPATH(dbpath) {
     log() << "ns: " << ns;
     _numInserts = 0;
     std::string filename = _DBPATH.toString() + ns.toString();
@@ -70,18 +70,20 @@ PmseRecordStore::PmseRecordStore(StringData ns,
     std::string mapper_filename = _DBPATH.toString() + ns.toString()
                     + "_mapper";
     if (!boost::filesystem::exists(mapper_filename.c_str())) {
-        std::cout << "Mapper create pool..." << std::endl;
+        log() << "Mapper create pool...";
         mapPool = pool<root>::create(mapper_filename, "kvmapper",
-                        80 * PMEMOBJ_MIN_POOL);
-        std::cout << "Create pool end" << std::endl;
+                                     (ns.toString() == "local.startup_log" ||
+                                      ns.toString() == "_mdb_catalog" ? 10 : 80)
+                                     * PMEMOBJ_MIN_POOL);
+        log() << "Create pool end";
     } else {
-        std::cout << "Open pool..." << std::endl;
+        log() << "Open pool...";
         try {
             mapPool = pool<root>::open(mapper_filename, "kvmapper");
         } catch (std::exception &e) {
-            std::cout << "Error handled: " << e.what() << std::endl;
+            log() << "Error handled: " << e.what();
         }
-        std::cout << "Open pool end..." << std::endl;
+        log() << "Open pool end...";
     }
     auto mapper_root = mapPool.get_root();
 
@@ -99,7 +101,7 @@ PmseRecordStore::PmseRecordStore(StringData ns,
         mapper = mapPool.get_root()->kvmap_root_ptr;
 
     } catch (std::exception& e) {
-        std::cout << "Error while creating PMStore engine" << std::endl;
+        log() << "Error while creating PMStore engine";
     };
 }
 
@@ -115,7 +117,7 @@ StatusWith<RecordId> PmseRecordStore::insertRecord(OperationContext* txn,
             memcpy(obj->data, data, len);
         });
     } catch (std::exception &e) {
-        std::cout << e.what() << std::endl;
+        log() << e.what();
     }
     if(obj == nullptr)
         return StatusWith<RecordId>(ErrorCodes::InternalError,
@@ -124,56 +126,53 @@ StatusWith<RecordId> PmseRecordStore::insertRecord(OperationContext* txn,
     if(!id)
         return StatusWith<RecordId>(ErrorCodes::OperationFailed,
                                     "Null record Id!");
+    while(mapper->dataSize() > _storageSize) {
+        _storageSize =  _storageSize + baseSize;
+    }
+    deleteCappedAsNeeded(txn);
     return StatusWith<RecordId>(RecordId(id));
 }
 
-Status PmseRecordStore::updateRecord(
-                OperationContext* txn, const RecordId& oldLocation,
-                const char* data, int len, bool enforceQuota,
-                UpdateNotifier* notifier) {
-
+Status PmseRecordStore::updateRecord(OperationContext* txn, const RecordId& oldLocation,
+                                     const char* data, int len, bool enforceQuota,
+                                     UpdateNotifier* notifier) {
     persistent_ptr<InitData> obj;
-    persistent_ptr<InitData> oldObj = nullptr;
-
-    mapper->find(oldLocation.repr(), &oldObj);
     try {
         transaction::exec_tx(mapPool, [&] {
             obj = pmemobj_tx_alloc(sizeof(InitData::size) + len, 1);
             obj->size = len;
             memcpy(obj->data, data, len);
             mapper->updateKV(oldLocation.repr(), obj);
-            delete_persistent<InitData>(oldObj);
+            deleteCappedAsNeeded(txn);
         });
     } catch (std::exception &e) {
-        std::cout << e.what() << std::endl;
+        log() << e.what();
         return Status(ErrorCodes::BadValue, e.what());
+    }
+    while(mapper->dataSize() > _storageSize) {
+        _storageSize =  _storageSize + baseSize;
     }
     return Status::OK();
 }
 
 void PmseRecordStore::deleteRecord(OperationContext* txn,
                                       const RecordId& dl) {
-    persistent_ptr<InitData> obj = nullptr;
-    mapper->find((uint64_t) dl.repr(), &obj);
     mapper->remove((uint64_t) dl.repr());
-
-    try {
-        transaction::exec_tx(mapPool, [&] {
-            delete_persistent<InitData>(obj);
-        });
-    } catch (std::exception &e) {
-        std::cout << e.what() << std::endl;
-    }
 }
 
-void PmseRecordStore::setCappedCallback(CappedCallback*) {
-    log() << "Not mocked setCappedCallback";
+void PmseRecordStore::setCappedCallback(CappedCallback* cb) {
+    _cappedCallback = cb;
+}
+
+void PmseRecordStore::temp_cappedTruncateAfter(OperationContext* txn, RecordId end,
+                                               bool inclusive) {
+    log() << "Not implemented temp_cappedTruncateAfter()";
 }
 
 bool PmseRecordStore::findRecord(OperationContext* txn, const RecordId& loc,
                                     RecordData* rd) const {
     persistent_ptr<InitData> obj;
-    if(mapper->find((uint64_t) loc.repr(), &obj)){
+    if(mapper->find((uint64_t) loc.repr(), obj)){
         invariant(obj != nullptr);
         *rd = RecordData(obj->data, obj->size);
         return true;
@@ -187,6 +186,8 @@ PmseRecordCursor::PmseRecordCursor(persistent_ptr<PmseMap<InitData>> mapper) {
 }
 
 boost::optional<Record> PmseRecordCursor::next() {
+    if(_eof)
+        return boost::none;
     if(_cur != nullptr) {
         if(_cur->next != nullptr) {
             _cur = _cur->next;
@@ -210,9 +211,10 @@ boost::optional<Record> PmseRecordCursor::next() {
             actual++;
         }
     }
-    if(_cur == nullptr)
-        return {};
-
+    if(_cur == nullptr) {
+        _eof = true;
+        return boost::none;
+    }
     RecordId a((int64_t) _cur->idValue);
     RecordData b(_cur->ptr->data, _cur->ptr->size);
     return { {a,b}};
@@ -220,14 +222,71 @@ boost::optional<Record> PmseRecordCursor::next() {
 
 boost::optional<Record> PmseRecordCursor::seekExact(const RecordId& id) {
     persistent_ptr<InitData> obj = nullptr;
-    bool status = _mapper->find(id.repr(), &obj);
-    if (!status || !obj) {
-        return {};
+    bool status = _mapper->getPair(id.repr(), _cur);
+    if(_cur == nullptr || _cur->ptr == nullptr) {
+        return boost::none;
     }
-
+    obj = _cur->ptr;
+    if (!status || !obj) {
+        return boost::none;
+    }
     RecordId a(id.repr());
     RecordData b(obj->data, obj->size);
-    return { {a,b}};
+    return {{a,b}};
+}
+
+void PmseRecordCursor::save() {
+    auto temp = _cur;
+    auto row = actual;
+    if(temp != nullptr) {
+        if(temp->next != nullptr) {
+            temp = temp->next;
+        } else {
+            temp = nullptr;
+            while(temp == nullptr && ++row < _mapper->_size) {
+                persistent_ptr<KVPair> head = _mapper->getFirstPtr(row);
+                if(head != nullptr) {
+                    temp = head;
+                    break;
+                }
+            }
+        }
+    } else {
+        while(temp == nullptr && row < _mapper->_size) {
+            persistent_ptr<KVPair> head = _mapper->getFirstPtr(row);
+            if(head != nullptr) {
+                temp = head;
+                break;
+            }
+            row++;
+        }
+    }
+    _restorePoint = temp;
+}
+
+bool PmseRecordCursor::restore() {
+    if(_mapper->isCapped()) {
+        _eof = true;
+        return false;
+    }
+    if(_eof)
+        return true;
+    if(_restorePoint == nullptr) {
+        _eof = true;
+        return true;
+    }
+    if(_cur == nullptr) {
+        _cur = _restorePoint;
+        return true;
+    }
+    if(!_mapper->hasId(_cur->idValue)) {
+        _cur = _restorePoint;
+    }
+    return true;
+}
+
+void PmseRecordCursor::saveUnpositioned() {
+    _eof = true;
 }
 }
 

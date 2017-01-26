@@ -71,7 +71,6 @@ public:
     uint64_t minMax = 0;
 };
 
-
 struct PmseTreeNode {
     PmseTreeNode() :
                     num_keys(0) {
@@ -84,9 +83,6 @@ struct PmseTreeNode {
 
         if (node_leaf) {
             values_array = make_persistent<RecordId[TREE_ORDER]>();
-            /*for (i = 0; i < TREE_ORDER; i++) {
-                values_array[i] = RecordId(i);
-            }*/
             is_leaf = true;
         } else {
             for (i = 0; i < TREE_ORDER; i++) {
@@ -109,8 +105,6 @@ struct PmseTreeNode {
     p<bool> is_leaf = false;
 };
 
-
-
 struct CursorObject {
     persistent_ptr<PmseTreeNode> node;
     uint64_t index;
@@ -129,17 +123,15 @@ private:
     uint64_t cut(uint64_t length);
     void placeAfter(PMEMobjpool *pm_pool, BSONObj& key, const RecordId& loc);
     void placeBefore(PMEMobjpool *pm_pool, BSONObj& key, const RecordId& loc);
-    int64_t get_neighbor_index(persistent_ptr<PmseTreeNode> node);
-    persistent_ptr<PmseTreeNode> coalesce_nodes(
-                    pool_base pop,
-                    persistent_ptr<PmseTreeNode> root,
+    int64_t getNeighborIndex(persistent_ptr<PmseTreeNode> node);
+    persistent_ptr<PmseTreeNode> coalesceNodes(
+                    pool_base pop, persistent_ptr<PmseTreeNode> root,
                     persistent_ptr<PmseTreeNode> n,
                     persistent_ptr<PmseTreeNode> neighbor,
                     int64_t neighbor_index, BSONObj_PM k_prime);
 
-    persistent_ptr<PmseTreeNode> redistribute_nodes(
-                    pool_base pop,
-                    persistent_ptr<PmseTreeNode> root,
+    persistent_ptr<PmseTreeNode> redistributeNodes(
+                    pool_base pop, persistent_ptr<PmseTreeNode> root,
                     persistent_ptr<PmseTreeNode> n,
                     persistent_ptr<PmseTreeNode> neighbor,
                     int64_t neighbor_index, int64_t k_prime_index,
@@ -179,12 +171,12 @@ private:
                     pool_base pop, persistent_ptr<PmseTreeNode> root,
                     persistent_ptr<PmseTreeNode> old_node, uint64_t left_index,
                     BSONObj_PM& new_key, persistent_ptr<PmseTreeNode> right);
-    persistent_ptr<PmseTreeNode> adjust_root(persistent_ptr<PmseTreeNode> root);
-    persistent_ptr<PmseTreeNode> delete_entry(pool_base pop, BSONObj& key,
-                                              persistent_ptr<PmseTreeNode> node,
-                                              uint64_t index);
+    persistent_ptr<PmseTreeNode> adjustRoot(persistent_ptr<PmseTreeNode> root);
+    persistent_ptr<PmseTreeNode> deleteEntry(pool_base pop, BSONObj& key,
+                                             persistent_ptr<PmseTreeNode> node,
+                                             uint64_t index);
 
-    persistent_ptr<PmseTreeNode> remove_entry_from_node(
+    persistent_ptr<PmseTreeNode> removeEntryFromNode(
                     BSONObj& key, persistent_ptr<PmseTreeNode> node,
                     uint64_t index);
 
@@ -192,7 +184,7 @@ private:
     persistent_ptr<PmseTreeNode> root;
     persistent_ptr<PmseTreeNode> first;
     persistent_ptr<PmseTreeNode> last;
-    CursorObject _cursor;
+    //CursorObject _cursor;
     BSONObj _ordering;
     p<bool> modified = false;
 };

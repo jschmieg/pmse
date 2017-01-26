@@ -33,13 +33,19 @@
 #ifndef SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_RECORD_STORE_H_
 #define SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_RECORD_STORE_H_
 
+#include <cmath>
 
 #include "libpmem.h"
 #include "libpmemobj.h"
+#include <libpmemobj++/p.hpp>
+#include <libpmemobj++/pext.hpp>
+#include <libpmemobj++/utils.hpp>
 
 #include "mongo/platform/basic.h"
 #include "mongo/db/catalog/collection_options.h"
+#include "mongo/db/storage/capped_callback.h"
 #include "mongo/stdx/memory.h"
+
 
 #include "pmse_map.h"
 
@@ -49,6 +55,7 @@ namespace mongo {
 
 namespace {
 const std::string storeName = "pmse";
+const uint64_t baseSize = 20480;
 }
 
 struct root {
@@ -63,21 +70,21 @@ public:
 
     boost::optional<Record> seekExact(const RecordId& id) final;
 
-    void save() final {
-    }
+    void save() final;
 
-    bool restore() final {
-        // TODO: Implement or delete
-        return true;
-    }
+    bool restore() final;
 
-    void detachFromOperationContext() final {
-    }
-    void reattachToOperationContext(OperationContext* txn) final {
-    }
+    void detachFromOperationContext() final {}
+
+    void reattachToOperationContext(OperationContext* txn) final {}
+
+    void saveUnpositioned();
 private:
     persistent_ptr<PmseMap<InitData>> _mapper;
     persistent_ptr<KVPair> _cur;
+    persistent_ptr<KVPair> _restorePoint;
+    p<bool> _eof = false;
+    p<bool> _isCapped;
     p<int> actual = 0;
     PMEMoid _currentOid = OID_NULL;
 };
@@ -85,7 +92,7 @@ private:
 class PmseRecordStore : public RecordStore {
 public:
     PmseRecordStore(StringData ns, const CollectionOptions& options,
-                       StringData dbpath);
+                    StringData dbpath);
     ~PmseRecordStore() {
         try {
             mapPool.close();
@@ -98,11 +105,10 @@ public:
         return storeName.c_str();
     }
 
-    virtual void setCappedCallback(CappedCallback*);
+    virtual void setCappedCallback(CappedCallback* cb);
 
     virtual long long dataSize(OperationContext* txn) const {
-        // TODO: Implement returning size
-        return 0;
+        return mapper->dataSize();
     }
 
     virtual long long numRecords(OperationContext* txn) const {
@@ -116,8 +122,7 @@ public:
     virtual int64_t storageSize(OperationContext* txn,
                                 BSONObjBuilder* extraInfo = NULL,
                                 int infoLevel = 0) const {
-        // TODO: Implement storageSize
-        return 0;
+        return _storageSize;
     }
 
     virtual bool findRecord(OperationContext* txn, const RecordId& loc,
@@ -153,10 +158,10 @@ public:
     }
 
     virtual Status updateRecord(OperationContext* txn,
-                                              const RecordId& oldLocation,
-                                              const char* data, int len,
-                                              bool enforceQuota,
-                                              UpdateNotifier* notifier);
+                                const RecordId& oldLocation,
+                                const char* data, int len,
+                                bool enforceQuota,
+                                UpdateNotifier* notifier);
 
     virtual bool updateWithDamagesSupported() const {
         return false;
@@ -175,13 +180,14 @@ public:
     }
 
     virtual Status truncate(OperationContext* txn) {
-        std::cout << "truncate" << std::endl;
+        if(!mapper->truncate()) {
+            return Status(ErrorCodes::OperationFailed, "Truncate error");
+        }
         return Status::OK();
     }
 
     virtual void temp_cappedTruncateAfter(OperationContext* txn, RecordId end,
-                                          bool inclusive) {
-    }
+                                          bool inclusive);
 
     virtual Status validate(OperationContext* txn, bool full, bool scanData,
                             ValidateAdaptor* adaptor, ValidateResults* results,
@@ -191,7 +197,14 @@ public:
 
     virtual void appendCustomStats(OperationContext* txn,
                                    BSONObjBuilder* result, double scale) const {
-        result->appendNumber("numInserts", _numInserts);
+        if(mapper->isCapped()) {
+            result->appendNumber("capped", true);
+            result->appendNumber("maxSize", floor(mapper->getMax() / scale));
+            result->appendNumber("max", mapper->getMaxSize());
+        } else {
+            result->appendNumber("capped", false);
+        }
+        result->appendNumber("numInserts", mapper->fillment());
     }
 
     virtual Status touch(OperationContext* txn, BSONObjBuilder* output) const {
@@ -214,15 +227,28 @@ public:
                             ValidateResults* results,
                             BSONObjBuilder* output) {
         // TODO: Implement validate
+        output->appendNumber("nrecords", mapper->fillment());
         return Status::OK();
     }
 
 private:
+    CappedCallback* _cappedCallback;
+    int64_t _storageSize = baseSize;
     CollectionOptions _options;
     long long _numInserts;
     const StringData _DBPATH;
     pool<root> mapPool;
     persistent_ptr<PmseMap<InitData>> mapper;
+    void deleteCappedAsNeeded(OperationContext* txn) {
+        while(mapper->isCapped() && mapper->removalIsNeeded()) {
+            uint64_t idToDelete = mapper->getCappedFirstId();
+            RecordId id(idToDelete);
+            RecordData data;
+            findRecord(txn, id, &data);
+            mapper->remove(idToDelete);
+            uassertStatusOK(_cappedCallback->aboutToDeleteCapped(txn, id, data));
+        }
+    }
 };
 }
 #endif /* SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_RECORD_STORE_H_ */

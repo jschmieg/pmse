@@ -51,10 +51,11 @@ namespace mongo {
 class PmseSortedDataInterface : public SortedDataInterface {
 public:
 
-    PmseSortedDataInterface(StringData ident, const IndexDescriptor* desc, StringData dbpath);
+    PmseSortedDataInterface(StringData ident, const IndexDescriptor* desc,
+                            StringData dbpath);
 
     virtual SortedDataBuilderInterface* getBulkBuilder(OperationContext* txn,
-    bool dupsAllowed) override;
+                                                       bool dupsAllowed) override;
 
     virtual Status insert(OperationContext* txn, const BSONObj& key,
                           const RecordId& loc, bool dupsAllowed);
@@ -63,14 +64,11 @@ public:
                          const RecordId& loc, bool dupsAllowed);
 
     virtual Status dupKeyCheck(OperationContext* txn, const BSONObj& key,
-                               const RecordId& loc) {
-        // TODO: Implement dupKeyCheck
-        return Status::OK();
-    }
+                               const RecordId& loc);
 
-    virtual void fullValidate(OperationContext* txn,
-                              long long* numKeysOut,
+    virtual void fullValidate(OperationContext* txn, long long* numKeysOut,
                               ValidateResults* fullResults) const {
+        *numKeysOut = _records;
         // TODO: Implement fullValidate
     }
 
@@ -86,8 +84,7 @@ public:
     }
 
     virtual bool isEmpty(OperationContext* txn) {
-        // TODO: Implement isEmpty method
-        return true;
+        return _records == 0 ? true : false;
     }
 
     virtual Status initAsEmpty(OperationContext* txn) {
@@ -98,10 +95,9 @@ public:
     std::unique_ptr<SortedDataInterface::Cursor> newCursor(
                     OperationContext* txn, bool isForward) const;
 
-
-
 private:
     void moveToNext();
+    p<int> _records = 0;
     StringData filepath;
     pool<PmseTree> pm_pool;
     persistent_ptr<PmseTree> tree;
