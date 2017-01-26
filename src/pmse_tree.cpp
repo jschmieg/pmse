@@ -483,12 +483,6 @@ persistent_ptr<PmseTreeNode> PmseTree::removeEntryFromNode(
     uint64_t i, num_pointers;
     // Remove the key and shift other keys accordingly.
 
-    for (i = 0; i < node->num_keys; i++) {
-        std::cout << "removeEntryFromNode node["<< i <<"]=" << node->keys[i].getBSON().toString();//  << "value = " << node->values_array[i];
-        std::cout << std::endl;
-    }
-    std::cout << "index = " << index;
-    std::cout << std::endl;
     i = index;
 
     BSONObj_PM bsonPM;
