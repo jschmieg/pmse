@@ -63,6 +63,7 @@ PmseSortedDataInterface::PmseSortedDataInterface(StringData ident,
 Status PmseSortedDataInterface::insert(OperationContext* txn,
                                        const BSONObj& key, const RecordId& loc,
                                        bool dupsAllowed) {
+
     BSONObj_PM bsonPM;
     BSONObj owned = key.getOwned();
     Status status = Status::OK();

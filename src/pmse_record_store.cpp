@@ -56,6 +56,7 @@ PmseRecordStore::PmseRecordStore(StringData ns,
                                        StringData dbpath) :
                 RecordStore(ns), _cappedCallback(nullptr), _options(options), _DBPATH(dbpath) {
     log() << "ns: " << ns;
+    _numInserts = 0;
     std::string filename = _DBPATH.toString() + ns.toString();
     boost::filesystem::path path;
     log() << filename;
@@ -97,7 +98,7 @@ PmseRecordStore::PmseRecordStore(StringData ns,
         });
     }
     try {
-        _mapper = mapPool.get_root()->kvmap_root_ptr;
+        mapper = mapPool.get_root()->kvmap_root_ptr;
 
     } catch (std::exception& e) {
         log() << "Error while creating PMStore engine";
@@ -115,9 +116,6 @@ PmseRecordStore::~PmseRecordStore() {
 StatusWith<RecordId> PmseRecordStore::insertRecord(OperationContext* txn,
                                                       const char* data, int len,
                                                       bool enforceQuota) {
-    if (isCapped() && len > (int)_mapper->getMax()) {
-        return StatusWith<RecordId>(ErrorCodes::BadValue, "object to insert exceeds cappedMaxSize");
-    }
     persistent_ptr<InitData> obj;
     uint64_t id = 0;
     try {
@@ -132,14 +130,14 @@ StatusWith<RecordId> PmseRecordStore::insertRecord(OperationContext* txn,
     if(obj == nullptr)
         return StatusWith<RecordId>(ErrorCodes::InternalError,
                                     "Not allocated memory!");
-    id = _mapper->insert(obj);
+    id = mapper->insert(obj);
     if(!id)
         return StatusWith<RecordId>(ErrorCodes::OperationFailed,
                                     "Null record Id!");
-    deleteCappedAsNeeded(txn);
-    while(_mapper->dataSize() > _storageSize) {
+    while(mapper->dataSize() > _storageSize) {
         _storageSize =  _storageSize + baseSize;
     }
+    deleteCappedAsNeeded(txn);
     return StatusWith<RecordId>(RecordId(id));
 }
 
@@ -152,14 +150,14 @@ Status PmseRecordStore::updateRecord(OperationContext* txn, const RecordId& oldL
             obj = pmemobj_tx_alloc(sizeof(InitData::size) + len, 1);
             obj->size = len;
             memcpy(obj->data, data, len);
-            _mapper->updateKV(oldLocation.repr(), obj);
+            mapper->updateKV(oldLocation.repr(), obj);
             deleteCappedAsNeeded(txn);
         });
     } catch (std::exception &e) {
         log() << e.what();
         return Status(ErrorCodes::BadValue, e.what());
     }
-    while(_mapper->dataSize() > _storageSize) {
+    while(mapper->dataSize() > _storageSize) {
         _storageSize =  _storageSize + baseSize;
     }
     return Status::OK();
@@ -167,7 +165,7 @@ Status PmseRecordStore::updateRecord(OperationContext* txn, const RecordId& oldL
 
 void PmseRecordStore::deleteRecord(OperationContext* txn,
                                       const RecordId& dl) {
-    _mapper->remove((uint64_t) dl.repr());
+    mapper->remove((uint64_t) dl.repr());
 }
 
 void PmseRecordStore::setCappedCallback(CappedCallback* cb) {
@@ -176,25 +174,13 @@ void PmseRecordStore::setCappedCallback(CappedCallback* cb) {
 
 void PmseRecordStore::temp_cappedTruncateAfter(OperationContext* txn, RecordId end,
                                                bool inclusive) {
-    PmseRecordCursor cursor(_mapper, true);
-    auto rec = cursor.seekExact(end);
-    if(!inclusive)
-        rec = cursor.next();
-    while(rec != boost::none) {
-        RecordId id(rec->id);
-        RecordData data(rec->data);
-        rec = cursor.next();
-        if(_cappedCallback) {
-            deleteRecord(txn, id);
-            _cappedCallback->aboutToDeleteCapped(txn, id, data);
-        }
-    }
+    log() << "Not implemented temp_cappedTruncateAfter()";
 }
 
 bool PmseRecordStore::findRecord(OperationContext* txn, const RecordId& loc,
                                     RecordData* rd) const {
     persistent_ptr<InitData> obj;
-    if(_mapper->find((uint64_t) loc.repr(), obj)){
+    if(mapper->find((uint64_t) loc.repr(), obj)){
         invariant(obj != nullptr);
         *rd = RecordData(obj->data, obj->size);
         return true;
@@ -203,33 +189,18 @@ bool PmseRecordStore::findRecord(OperationContext* txn, const RecordId& loc,
 }
 
 void PmseRecordStore::deleteCappedAsNeeded(OperationContext* txn) {
-    while(_mapper->isCapped() && _mapper->removalIsNeeded()) {
-        uint64_t idToDelete = _mapper->getCappedFirstId();
+    while(mapper->isCapped() && mapper->removalIsNeeded()) {
+        uint64_t idToDelete = mapper->getCappedFirstId();
         RecordId id(idToDelete);
         RecordData data;
         findRecord(txn, id, &data);
-        _mapper->remove(idToDelete);
+        mapper->remove(idToDelete);
         uassertStatusOK(_cappedCallback->aboutToDeleteCapped(txn, id, data));
     }
 }
 
-Status PmseRecordStore::insertRecordsWithDocWriter(OperationContext* txn,
-                                          const DocWriter* const* docs,
-                                          size_t nDocs,
-                                          RecordId* idsOut) {
-    // TODO(kfilipek): Implement insertRecordsWithDocWriter
-    log() << "Not implemented: insertRecordsWithDocWriter";
-    return Status::OK();
-}
-
-void PmseRecordStore::waitForAllEarlierOplogWritesToBeVisible(OperationContext* txn) const {
-    // TODO(kfilipek): Implement insertRecordsWithDocWriter
-    log() << "Not implemented: waitForAllEarlierOplogWritesToBeVisible";
-}
-
-PmseRecordCursor::PmseRecordCursor(persistent_ptr<PmseMap<InitData>> mapper, bool forward) : _forward(forward), _lastMoveWasRestore(false) {
+PmseRecordCursor::PmseRecordCursor(persistent_ptr<PmseMap<InitData>> mapper) : _lastMoveWasRestore(false) {
     _mapper = mapper;
-    _before = nullptr;
     _cur = nullptr;
 }
 
@@ -260,7 +231,6 @@ void PmseRecordCursor::moveToNext(bool inNext) {
             listNumber++;
         }
     }
-
     if(inNext) {
         _cur = cursor;
         actual = listNumber;
@@ -276,12 +246,9 @@ boost::optional<Record> PmseRecordCursor::next() {
     if(_lastMoveWasRestore) {
         _lastMoveWasRestore = false;
     } else {
-        if(_forward)
-            moveToNext();
-        else
-            moveBackward();
+        moveToNext();
     }
-    if(_cur == nullptr || _eof) {
+    if(_cur == nullptr) {
         _eof = true;
         return boost::none;
     }
@@ -334,34 +301,6 @@ bool PmseRecordCursor::restore() {
 
 void PmseRecordCursor::saveUnpositioned() {
     _eof = true;
-}
-
-void PmseRecordCursor::moveToLast() {
-    _cur = _mapper->getFirstPtr(0);
-    if(_cur && !_forward) {
-        while(_cur->next) {
-            _cur = _cur->next;
-        }
-    }
-}
-
-void PmseRecordCursor::moveBackward() {
-    if(!_eof && _cur) {
-        auto temp = _mapper->getFirstPtr(0);
-        _before = nullptr;
-        if(temp && !_forward) {
-            while(temp->next && temp != _cur) {
-                _before = temp;
-                temp = temp->next;
-            }
-        }
-        _cur = _before;
-    } else {
-        moveToLast();
-    }
-    if(_cur == nullptr) {
-        _eof = true;
-    }
 }
 }
 

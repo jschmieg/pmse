@@ -37,17 +37,18 @@
  *      Author: kfilipek
  */
 
-#ifndef SRC_PMSE_LIST_INT_PTR_H_
-#define SRC_PMSE_LIST_INT_PTR_H_
+#ifndef SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_LIST_INT_PTR_H_
+#define SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_LIST_INT_PTR_H_
 
+#include <vector>
+
+#include <libpmemobj.h>
 #include <libpmemobj++/make_persistent.hpp>
 #include <libpmemobj++/p.hpp>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/pext.hpp>
 #include <libpmemobj++/transaction.hpp>
 #include <libpmemobj++/utils.hpp>
-
-#include <vector>
 
 using namespace nvml::obj;
 
@@ -69,14 +70,15 @@ typedef struct _pair KVPair;
 class PmseListIntPtr {
     template<typename T>
     friend class PmseMap;
- public:
+public:
     PmseListIntPtr();
     ~PmseListIntPtr();
-    void insertKV(const persistent_ptr<KVPair> &key,
-                  const persistent_ptr<InitData> &value);
+    void insertKV(persistent_ptr<KVPair> &key, persistent_ptr<InitData> &value);
+    void insertKV_capped(persistent_ptr<KVPair> &key, persistent_ptr<InitData> &value,
+                         bool isCapped, uint64_t maxDoc, uint64_t sizeOfColl);
     bool find(uint64_t key, persistent_ptr<InitData> &item_ptr);
     bool getPair(uint64_t key, persistent_ptr<KVPair> &item_ptr);
-    void update(uint64_t key, const persistent_ptr<InitData> &value);
+    void update(uint64_t key, persistent_ptr<InitData> &value);
     int64_t deleteKV(uint64_t key, persistent_ptr<KVPair> &deleted);
     bool hasKey(uint64_t key);
     void clear();
@@ -84,7 +86,7 @@ class PmseListIntPtr {
     uint64_t size();
     uint64_t getNextId();
 
- private:
+private:
     persistent_ptr<KVPair> getHead() {
         return head;
     }
@@ -104,7 +106,7 @@ class PmseListIntPtr {
     FreeSpace isSpace = YES;
     bool isFullCapped;
     persistent_ptr<KVPair> first;
-    p<uint64_t> actualSizeOfCollection = 0;
+    p<uint64_t> actualSizeOfCollecion = 0;
 };
-}  // namespace mongo
-#endif  // SRC_PMSE_LIST_INT_PTR_H_
+}
+#endif /* SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_LIST_INT_PTR_H_ */

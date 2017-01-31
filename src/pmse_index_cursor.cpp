@@ -30,11 +30,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
-
 #include "pmse_index_cursor.h"
 
-#include "mongo/util/log.h"
+#define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
 namespace mongo {
 
@@ -412,7 +410,8 @@ bool PmseCursor::correctType(BSONObj record) {
             result = true;
         break;
     default:
-        log() << "not supported";
+        std::cout << "not supported ";
+        std::cout << std::endl;
     }
     return result;
 }
@@ -678,7 +677,9 @@ boost::optional<IndexKeyEntry> PmseCursor::seek(
 boost::optional<IndexKeyEntry> PmseCursor::seekExact(
                 const BSONObj& key, RequestedInfo parts = kKeyAndLoc) {
     auto kv = seek(key, true, kKeyAndLoc);
-    if (kv && kv->key.woCompare(key, BSONObj(), false) == 0)
+    if (kv
+                    && kv->key.woCompare(key, BSONObj(), /*considerFieldNames*/
+                                    false) == 0)
         return kv;
     return boost::none;
 }

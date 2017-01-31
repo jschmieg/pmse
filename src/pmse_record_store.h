@@ -30,22 +30,24 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef SRC_PMSE_RECORD_STORE_H_
-#define SRC_PMSE_RECORD_STORE_H_
+#ifndef SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_RECORD_STORE_H_
+#define SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_RECORD_STORE_H_
 
-#include "pmse_map.h"
+#include <cmath>
 
+#include "libpmem.h"
+#include "libpmemobj.h"
 #include <libpmemobj++/p.hpp>
 #include <libpmemobj++/pext.hpp>
 #include <libpmemobj++/utils.hpp>
-
-#include <cmath>
-#include <string>
 
 #include "mongo/platform/basic.h"
 #include "mongo/db/catalog/collection_options.h"
 #include "mongo/db/storage/capped_callback.h"
 #include "mongo/stdx/memory.h"
+
+
+#include "pmse_map.h"
 
 using namespace nvml::obj;
 
@@ -61,8 +63,8 @@ struct root {
 };
 
 class PmseRecordCursor final : public SeekableRecordCursor {
- public:
-    PmseRecordCursor(persistent_ptr<PmseMap<InitData>> mapper, bool forward);
+public:
+    PmseRecordCursor(persistent_ptr<PmseMap<InitData>> mapper);
 
     boost::optional<Record> next();
 
@@ -77,27 +79,21 @@ class PmseRecordCursor final : public SeekableRecordCursor {
     void reattachToOperationContext(OperationContext* txn) final {}
 
     void saveUnpositioned();
-
- private:
-    void moveToNext(bool inNext = true);
-    void moveToLast();
-    void moveBackward();
-
+private:
     persistent_ptr<PmseMap<InitData>> _mapper;
-    persistent_ptr<KVPair> _before;
     persistent_ptr<KVPair> _cur;
     persistent_ptr<KVPair> _restorePoint;
     p<bool> _eof = false;
     p<bool> _isCapped;
-    p<bool> _forward;
     p<bool> _lastMoveWasRestore;
     p<int> actual = 0;
     p<int> _actualAfterRestore = 0;
     PMEMoid _currentOid = OID_NULL;
+    void moveToNext(bool inNext = true);
 };
 
 class PmseRecordStore : public RecordStore {
- public:
+public:
     PmseRecordStore(StringData ns, const CollectionOptions& options,
                     StringData dbpath);
 
@@ -110,11 +106,11 @@ class PmseRecordStore : public RecordStore {
     virtual void setCappedCallback(CappedCallback* cb);
 
     virtual long long dataSize(OperationContext* txn) const {
-        return _mapper->dataSize();
+        return mapper->dataSize();
     }
 
     virtual long long numRecords(OperationContext* txn) const {
-        return (int64_t)_mapper->fillment();
+        return (long long) mapper->fillment();
     }
 
     virtual bool isCapped() const {
@@ -136,12 +132,28 @@ class PmseRecordStore : public RecordStore {
                                               const char* data, int len,
                                               bool enforceQuota);
 
+    virtual StatusWith<RecordId> insertRecord(OperationContext* txn,
+                                              const DocWriter* doc,
+                                              bool enforceQuota) {
+        // TODO: Implement record inserting
+        std::cout << "Not implemented insertRecord function!" << std::endl;
+        _numInserts++;
+        return StatusWith<RecordId>(RecordId(6, 4));
+    }
+
     virtual Status insertRecordsWithDocWriter(OperationContext* txn,
                                               const DocWriter* const* docs,
                                               size_t nDocs,
-                                              RecordId* idsOut = nullptr);
+                                              RecordId* idsOut = nullptr) {
+        // TODO: Implement insertRecordsWithDocWriter
+        std::cout << "Not implemented: insertRecordsWithDocWriter" << std::endl;
+        return Status::OK();
+    }
 
-    virtual void waitForAllEarlierOplogWritesToBeVisible(OperationContext* txn) const;
+    virtual void waitForAllEarlierOplogWritesToBeVisible(OperationContext* txn) const {
+        // TODO: Implement insertRecordsWithDocWriter
+        std::cout << "Not implemented: waitForAllEarlierOplogWritesToBeVisible" << std::endl;
+    }
 
     virtual Status updateRecord(OperationContext* txn,
                                 const RecordId& oldLocation,
@@ -162,11 +174,11 @@ class PmseRecordStore : public RecordStore {
 
     std::unique_ptr<SeekableRecordCursor> getCursor(OperationContext* txn,
                                                     bool forward) const final {
-        return stdx::make_unique<PmseRecordCursor>(_mapper, forward);
+        return stdx::make_unique<PmseRecordCursor>(mapper);
     }
 
     virtual Status truncate(OperationContext* txn) {
-        if (!_mapper->truncate()) {
+        if(!mapper->truncate()) {
             return Status(ErrorCodes::OperationFailed, "Truncate error");
         }
         return Status::OK();
@@ -183,14 +195,14 @@ class PmseRecordStore : public RecordStore {
 
     virtual void appendCustomStats(OperationContext* txn,
                                    BSONObjBuilder* result, double scale) const {
-        if (_mapper->isCapped()) {
+        if(mapper->isCapped()) {
             result->appendNumber("capped", true);
-            result->appendNumber("maxSize", floor(_mapper->getMax() / scale));
-            result->appendNumber("max", _mapper->getMaxSize());
+            result->appendNumber("maxSize", floor(mapper->getMax() / scale));
+            result->appendNumber("max", mapper->getMaxSize());
         } else {
             result->appendNumber("capped", false);
         }
-        result->appendNumber("numInserts", _mapper->fillment());
+        result->appendNumber("numInserts", mapper->fillment());
     }
 
     virtual Status touch(OperationContext* txn, BSONObjBuilder* output) const {
@@ -212,20 +224,21 @@ class PmseRecordStore : public RecordStore {
                             ValidateAdaptor* adaptor,
                             ValidateResults* results,
                             BSONObjBuilder* output) {
-        // TODO(kfilipek): Implement validate
-        output->appendNumber("nrecords", _mapper->fillment());
+        // TODO: Implement validate
+        output->appendNumber("nrecords", mapper->fillment());
         return Status::OK();
     }
 
- private:
+private:
     void deleteCappedAsNeeded(OperationContext* txn);
 
     CappedCallback* _cappedCallback;
     int64_t _storageSize = baseSize;
     CollectionOptions _options;
+    long long _numInserts;
     const StringData _DBPATH;
     pool<root> mapPool;
-    persistent_ptr<PmseMap<InitData>> _mapper;
+    persistent_ptr<PmseMap<InitData>> mapper;
 };
-}  // namespace mongo
-#endif  // SRC_PMSE_RECORD_STORE_H_
+}
+#endif /* SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_RECORD_STORE_H_ */
