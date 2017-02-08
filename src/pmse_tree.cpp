@@ -57,7 +57,7 @@ void PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
     int64_t cmp;
     _ordering = ordering;
 
-    std::cout << " remove key = " << key.toString() << " RecID=" << loc;
+    std::cout << "<------------------remove key = " << key.toString() << " RecID=" << loc;
     std::cout << std::endl;
 
     //find node with key
@@ -137,6 +137,53 @@ void PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
             std::cout << " recordID = " << key_record.repr();
             std::cout << std::endl;
             break;
+        }
+    }
+    if(i==(node->num_keys))
+    {
+        std::cout << " Not found";
+        std::cout << std::endl;
+        if (dupsAllowed) {
+            if(node->previous)
+            {
+                node=node->previous;
+                i = node->num_keys-1;
+                while((key.woCompare(node->keys[i].getBSON(), _ordering, false)==0) && (node->values_array[i]).repr() != loc.repr())
+                {
+                    std::cout << "Remove2 i ="<< i << std::endl;
+                    if(i==0)
+                    {
+                        std::cout << "x";
+                    }
+                    if(i>0)
+                    {
+                        i--;
+                    }
+                    else
+                    {
+                        if(node->previous)
+                        {
+                            node=node->previous;
+                            i = node->num_keys-1;
+                            std::cout << "Prev node " << node.raw().off << std::endl;
+                            std::cout << "Prev node num keys" << node->num_keys << std::endl;
+                            for (uint64_t j = 0; j < node->num_keys; j++) {
+                                   std::cout << "print key[" << j << "] = "
+                                                   << node->keys[j].getBSON().toString();
+                                   std::cout << "print value[" << j << "] = "
+                                                   << (node->values_array[j]).repr();
+                                   std::cout << std::endl;
+                            }
+
+                        }
+                        else
+                        {
+                            std::cout << "Not found" << std::endl;;
+                            return;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -886,7 +933,7 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKey(
     if (current == nullptr)
         return current;
     while (!current->is_leaf) {
-        std::cout << "locateLeafWithKey: leaf=" << current.raw().off << std::endl;
+        std::cout << "locateLeafWithKey: node=" << current.raw().off << std::endl;
         std::cout << "locateLeafWithKey: Num of keys = " << current->num_keys << std::endl;
 
         for (i=0; i < current->num_keys; i++) {
@@ -921,6 +968,21 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKey(
             }
         }
         current = current->children_array[i];
+    }
+    std::cout << "locateLeafWithKey: found leaf=" << current.raw().off << std::endl;
+    std::cout << "locateLeafWithKey: Num of keys = " << current->num_keys << std::endl;
+
+    for (i=0; i < current->num_keys; i++) {
+        std::cout << "key[" << i << "]= "
+                        << current->keys[i].getBSON().toString();
+
+        std::cout << " recordID = " << current->values_array[i].repr();
+        std::cout << std::endl;
+
+        std::cout << "key offset[" << i << "]= "
+                                << current->keys[i].data.raw().off;
+                std::cout << std::endl;
+
     }
 
     return current;
