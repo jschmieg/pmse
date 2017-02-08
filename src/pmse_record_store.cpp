@@ -36,6 +36,7 @@
 #include "mongo/util/log.h"
 
 #include "pmse_record_store.h"
+#include "pmse_change.h"
 
 #include "errno.h"
 
@@ -46,6 +47,9 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/system/error_code.hpp>
+
+#include "mongo/db/storage/recovery_unit.h"
+#include "mongo/db/operation_context.h"
 
 using nvml::obj::transaction;
 
@@ -134,6 +138,7 @@ StatusWith<RecordId> PmseRecordStore::insertRecord(OperationContext* txn,
     if(!id)
         return StatusWith<RecordId>(ErrorCodes::OperationFailed,
                                     "Null record Id!");
+    txn->recoveryUnit()->registerChange(new InsertChange(mapper, RecordId(id)));
     while(mapper->dataSize() > _storageSize) {
         _storageSize =  _storageSize + baseSize;
     }
@@ -165,7 +170,7 @@ Status PmseRecordStore::updateRecord(OperationContext* txn, const RecordId& oldL
 
 void PmseRecordStore::deleteRecord(OperationContext* txn,
                                       const RecordId& dl) {
-    mapper->remove((uint64_t) dl.repr());
+    mapper->remove((uint64_t) dl.repr(), txn);
 }
 
 void PmseRecordStore::setCappedCallback(CappedCallback* cb) {

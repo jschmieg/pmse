@@ -38,6 +38,10 @@
  */
 
 #include "pmse_list_int_ptr.h"
+#include "pmse_change.h"
+
+#include "mongo/db/storage/recovery_unit.h"
+#include "mongo/db/operation_context.h"
 
 #include <exception>
 #include <iostream>
@@ -142,7 +146,7 @@ void PmseListIntPtr::insertKV_capped(persistent_ptr<KVPair> &key,
     }
 }
 
-int64_t PmseListIntPtr::deleteKV(uint64_t key, persistent_ptr<KVPair> &deleted) {
+int64_t PmseListIntPtr::deleteKV(uint64_t key, persistent_ptr<KVPair> &deleted, OperationContext* txn = nullptr) {
     auto before = head;
     int64_t sizeFreed = 0;
     for (auto rec = head; rec != nullptr; rec = rec->next) {
@@ -176,6 +180,8 @@ int64_t PmseListIntPtr::deleteKV(uint64_t key, persistent_ptr<KVPair> &deleted) 
                     rec->next = nullptr;
                     deleted = rec;
                 }
+                if(txn)
+                    txn->recoveryUnit()->registerChange(new RemoveChange(pop, *(deleted->ptr)));
                 sizeFreed = pmemobj_alloc_usable_size(deleted->ptr.raw());
                 delete_persistent<InitData>(deleted->ptr);
             });

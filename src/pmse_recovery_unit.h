@@ -44,23 +44,22 @@ public:
     virtual void beginUnitOfWork(OperationContext* opCtx) {
         std::cout << "Begin unit of work" << std::endl;
     };
-    virtual void commitUnitOfWork() {
-        std::cout << "Commit unit of work" << std::endl;
-    };
-    virtual void abortUnitOfWork() {
-        std::cout << "Abort unit of work" << std::endl;
-    };
+    virtual void commitUnitOfWork();
+    virtual void abortUnitOfWork();
     virtual bool waitUntilDurable() {return true;};
     virtual void abandonSnapshot() {};
     virtual SnapshotId getSnapshotId() const {
-        return SnapshotId(i);};
+        return SnapshotId();};
     virtual void registerChange(Change* change){
         std::cout << "Register change" << std::endl;
+        _changes.push_back(ChangePtr(change));
     };
     virtual void* writingPtr(void* data, size_t len) {return nullptr;};
     virtual void setRollbackWritesDisabled() {};
 private:
-    uint64_t i=1;
+    typedef std::shared_ptr<Change> ChangePtr;
+    typedef std::vector<ChangePtr> Changes;
+    Changes _changes;
 };
 
 class PmseChange : public RecoveryUnit::Change {

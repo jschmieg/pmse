@@ -56,6 +56,7 @@ const uint64_t CAPPED_SIZE = 1;
 const uint64_t HASHMAP_SIZE = 1000;
 class PmseRecordCursor;
 
+
 template<typename T>
 class PmseMap {
     friend PmseRecordCursor;
@@ -133,11 +134,11 @@ public:
         return _list[id % _size]->getPair(id, value);
     }
 
-    bool remove(uint64_t id) {
+    bool remove(uint64_t id, OperationContext* txn = nullptr) {
         persistent_ptr<T> temp;
         if(find(id, temp))
             _dataSize -= pmemobj_alloc_usable_size(temp.raw());
-        _list[id % _size]->deleteKV(id, _deleted);
+        _list[id % _size]->deleteKV(id, _deleted, txn);
         _hashmapSize--;
         return true;
     }
@@ -250,5 +251,11 @@ private:
         return temp;
     }
 };
+
+struct root {
+    persistent_ptr<PmseMap<InitData>> kvmap_root_ptr;
+};
+
+
 }
 #endif /* SRC_MONGO_DB_MODULES_PMSTORE_SRC_PMSE_MAP_H_ */

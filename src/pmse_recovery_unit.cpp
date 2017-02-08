@@ -41,8 +41,34 @@ namespace mongo {
     PmseRecoveryUnit::PmseRecoveryUnit()
     {
         log() << "Rec Unit ";
-        i=1;
     }
+
+    void PmseRecoveryUnit::commitUnitOfWork() {
+        std::cout << "Commit unit of work" << std::endl;
+        try {
+            for (Changes::iterator it = _changes.begin(), end = _changes.end(); it != end; ++it) {
+                (*it)->commit();
+            }
+            _changes.clear();
+        } catch (...) {
+            std::terminate();
+        }
+    }
+
+    void PmseRecoveryUnit::abortUnitOfWork() {
+        std::cout << "Abort unit of work" << std::endl;
+        try {
+            for (Changes::reverse_iterator it = _changes.rbegin(), end = _changes.rend(); it != end;
+                 ++it) {
+                ChangePtr change = *it;
+                change->rollback();
+            }
+            _changes.clear();
+        } catch (...) {
+            std::terminate();
+        }
+    }
+
 
     PmseChange::PmseChange(){
         log() << "Change";

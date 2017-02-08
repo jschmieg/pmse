@@ -58,10 +58,6 @@ const std::string storeName = "pmse";
 const uint64_t baseSize = 20480;
 }
 
-struct root {
-    persistent_ptr<PmseMap<InitData>> kvmap_root_ptr;
-};
-
 class PmseRecordCursor final : public SeekableRecordCursor {
 public:
     PmseRecordCursor(persistent_ptr<PmseMap<InitData>> mapper);
@@ -231,6 +227,8 @@ public:
 
 private:
     void deleteCappedAsNeeded(OperationContext* txn);
+
+
 
     CappedCallback* _cappedCallback;
     int64_t _storageSize = baseSize;
