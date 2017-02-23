@@ -49,7 +49,7 @@ PmseCursor::PmseCursor(OperationContext* txn, bool isForward,
                                 _tree(tree),
                                 _inf(0) {
     cursorType = EOO;
-
+    std::cout << this << " New Index Cursor <----------"<<std::endl;
     _endPosition = 0;
     _wasMoved = false;
     _eofRestore = false;
@@ -109,6 +109,8 @@ persistent_ptr<PmseTreeNode> PmseCursor::find_leaf(
 void PmseCursor::setEndPosition(const BSONObj& key, bool inclusive) {
     uint64_t i;
     int cmp;
+
+    std::cout << this << " Index Cursor set end pos key=" << key.toString() <<std::endl;
 
     if (!_tree->root) {
         return;
@@ -306,7 +308,7 @@ boost::optional<IndexKeyEntry> PmseCursor::next(
     /*
      * Advance cursor in leaves
      */
-
+std::cout << this << " Index Cursor next"<<std::endl;
     if (!_tree->root) {
         return boost::none;
     }
@@ -335,6 +337,7 @@ boost::optional<IndexKeyEntry> PmseCursor::next(
                 return boost::none;
             }
             if (correctType(_cursor.node->keys[_cursor.index].getBSON())){
+                std::cout << this << " Index Cursor next return key="<< _cursor.node->keys[_cursor.index].getBSON().toString() <<std::endl;
                 return IndexKeyEntry(
                             _cursor.node->keys[_cursor.index].getBSON(),
                             _cursor.node->values_array[_cursor.index]);
@@ -471,6 +474,7 @@ boost::optional<IndexKeyEntry> PmseCursor::seek(
     CursorObject _previousCursor;
     uint64_t i = 0;
     int cmp;
+    std::cout << this << " Index Cursor seek key="<< key.toString() <<std::endl;
 
     _returnValue = {};
 
@@ -701,6 +705,8 @@ boost::optional<IndexKeyEntry> PmseCursor::seekExact(
 
 void PmseCursor::save() {
 
+    std::cout << this << " Index Cursor save"<<std::endl;
+
     if(!_wasMoved)
         moveToNext();
     _wasMoved = true;
@@ -726,6 +732,9 @@ void PmseCursor::restore() {
     uint64_t i;
     int64_t cmp;
     bool found = false;
+
+    std::cout << this << " Index Cursor restore"<<std::endl;
+
     if(_eofRestore)
         return;
 

@@ -45,6 +45,8 @@
 #include <libpmemobj++/pool.hpp>
 #include "libpmemobj++/transaction.hpp"
 
+#include <libpmemobj++/mutex.hpp>
+
 using namespace nvml::obj;
 
 namespace mongo {
@@ -185,6 +187,7 @@ private:
     persistent_ptr<PmseTreeNode> first;
     persistent_ptr<PmseTreeNode> last;
     BSONObj _ordering;
+    nvml::obj::mutex pmutex;
 };
 
 }

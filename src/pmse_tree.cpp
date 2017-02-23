@@ -104,6 +104,10 @@ bool PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
     int64_t cmp;
     _ordering = ordering;
     //find node with key
+
+    std::lock_guard<nvml::obj::mutex> lock(pmutex);
+    std::cout << this << " Entered removing key="<< key.toString() <<std::endl;
+
     node = locateLeafWithKey(root, key, _ordering);
     //find place in node
     for (i = 0; i < node->num_keys; i++) {
@@ -181,6 +185,7 @@ bool PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
         txn->recoveryUnit()->registerChange(new RemoveIndexChange(pop, key, loc, dupsAllowed, ordering));
 
     root = deleteEntry(pop, key, node, i);
+    std::cout << this << " Removed key="<< key.toString() <<std::endl;
     return true;
 }
 
