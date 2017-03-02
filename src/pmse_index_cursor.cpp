@@ -67,6 +67,8 @@ PmseCursor::PmseCursor(OperationContext* txn, bool isForward,
     BSONObjBuilder maxBob;
     maxBob.append("", std::numeric_limits<double>::infinity());
     max = maxBob.obj();
+
+    std::cout <<"IC new <-----------------" << this <<std::endl;
 }
 
 /*
@@ -306,29 +308,128 @@ void PmseCursor::setEndPosition(const BSONObj& key, bool inclusive) {
         }
     }
 }
-
 boost::optional<IndexKeyEntry> PmseCursor::next(
                 RequestedInfo parts = kKeyAndLoc) {
-    /*
-     * Advance cursor in leaves
-     */
-    if (!_tree->root)
+    boost::optional<IndexKeyEntry> entry;
+    std::lock_guard<nvml::obj::mutex> lock(_tree->pmutex);
+    //std::unique_lock<nvml::obj::mutex> lock(_tree->pmutex);
+
+    entry = next2(parts);
+
+    if(_cursor.node.raw_ptr()->off == 0)
     {
-        return boost::none;
-    }
-    if (_cursor.node == nullptr)
-    {
-        return boost::none;
-    }
-    if (_eofRestore)
-    {
-        _eofRestore= false;
-        return boost::none;
+        return entry;
     }
 
     if(!_wasMoved)
     {
+        std::cout << this <<" moving next2" <<std::endl;
         moveToNext();
+        _wasMoved = true;
+    }
+    if(_cursor.node.raw_ptr()->off != 0)
+    {
+        std::cout << this <<" IC next" <<std::endl;
+        std::cout << this <<" IC next key="<<_cursor.node->keys[_cursor.index].getBSON().toString() <<std::endl;
+
+        _cursorKey = _cursor.node->keys[_cursor.index].getBSON();
+        _cursorId = _cursor.node->values_array[_cursor.index];
+        //remember next value
+    }
+    else
+    {
+        _eofRestore = true;
+    }
+    return entry;
+}
+
+boost::optional<IndexKeyEntry> PmseCursor::next2(
+                RequestedInfo parts = kKeyAndLoc) {
+    /*
+     * Advance cursor in leaves
+     */
+
+    persistent_ptr<PmseTreeNode> node;
+    CursorObject _previousCursor;
+    uint64_t i;
+    int64_t cmp;
+    bool found = false;
+    bool foundKey = false;
+
+    std::cout << this <<" IC next2" <<std::endl;
+
+    if(_wasRestore)
+    {
+        _wasRestore = false;
+        if (!_tree->root)
+        {
+            return boost::none;
+        }
+        if (_cursor.node == nullptr)
+        {
+            return boost::none;
+        }
+        if (_eofRestore)
+        {
+            _eofRestore= false;
+            return boost::none;
+        }
+
+        node = find_leaf(_tree->root, _cursorKey, _ordering);
+
+        for (i = 0; i < node->num_keys; i++) {
+            cmp = _cursorKey.woCompare(node->keys[i].getBSON(), _ordering, false);
+            if (cmp == 0)
+            {
+                foundKey = true;
+                if( _cursorId == node->values_array[i])
+                {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if(found)
+        {
+            std::cout << this <<" IC next2 found" <<std::endl;
+            _cursor.node = node;
+            _cursor.index = i;
+            found = false;
+        }
+        else
+        {
+            std::cout << this <<" IC next2 not found" <<std::endl;
+            if(foundKey) //key was found, but with wrong ID - check previous
+            {
+                _previousCursor.node = node;
+                _previousCursor.index = i;
+                while(previous(_previousCursor))
+                {
+                    cmp = _cursorKey.woCompare(_previousCursor.node->keys[_previousCursor.index].getBSON(), _ordering, false);
+                    if(cmp==0 && _cursorId==_previousCursor.node->values_array[_previousCursor.index])
+                    {
+                        _cursor.node = _previousCursor.node;
+                        _cursor.index = _previousCursor.index;
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                std::cout << this <<" IC next2 not found equal key" <<std::endl;
+                _cursor.node = node;
+                _cursor.index = i;
+                moveToNext();
+            }
+        }
+        _wasMoved = true;
+    }
+
+    if(!_wasMoved)
+    {
+        std::cout << this <<" moving next" <<std::endl;
+        moveToNext();
+        //_wasMoved = true;
     }
     _wasMoved = false;
 
@@ -343,6 +444,7 @@ boost::optional<IndexKeyEntry> PmseCursor::next(
                 return boost::none;
             }
             if (correctType(_cursor.node->keys[_cursor.index].getBSON())){
+                std::cout << this <<" IC next return="<< _cursor.node->keys[_cursor.index].getBSON().toString() <<std::endl;
                 return IndexKeyEntry(
                             _cursor.node->keys[_cursor.index].getBSON(),
                             _cursor.node->values_array[_cursor.index]);
@@ -476,8 +578,26 @@ void PmseCursor::moveToNext() {
 boost::optional<IndexKeyEntry> PmseCursor::seek(
                 const BSONObj& key, bool inclusive, RequestedInfo parts =
                                 kKeyAndLoc) {
+    boost::optional<IndexKeyEntry> entry;
+    std::cout << this <<" IC seek before"<< key.toString() <<std::endl;
+    std::lock_guard<nvml::obj::mutex> lock(_tree->pmutex);
+    std::cout << this <<" IC seek in"<< key.toString() <<std::endl;
     const auto discriminator = inclusive ? KeyString::kInclusive : KeyString::kExclusiveBefore;
-    return seekInTree(key, discriminator, parts);
+    entry = seekInTree(key, discriminator, parts);
+    if (entry)
+        std::cout << this <<" IC seek return="<< entry.get().key.toString() <<std::endl;
+    if(_cursor.node.raw_ptr()->off != 0)
+    {
+        _cursorKey = _cursor.node->keys[_cursor.index].getBSON();
+        _cursorId = _cursor.node->values_array[_cursor.index];
+        //remember next value
+    }
+    else
+    {
+        _eofRestore = true;
+    }
+    _wasMoved = true;
+    return entry;
 }
 
 
@@ -552,7 +672,7 @@ boost::optional<IndexKeyEntry> PmseCursor::seekInTree(
         _cursor.node = node;
         _cursor.index = i - 1;
         if (_forward) {
-            next(parts);
+            next2(parts);
             if (!_cursor.node) {
                 return boost::none;
             }
@@ -597,11 +717,11 @@ boost::optional<IndexKeyEntry> PmseCursor::seekInTree(
                                 _cursor.node->keys[_cursor.index].getBSON(),
                                 _cursor.node->values_array[_cursor.index]);
             } else {
-                return next();
+                return next2();
             }
         } else
         {
-            return next();
+            return next2();
         }
     }
     /*
@@ -616,7 +736,7 @@ boost::optional<IndexKeyEntry> PmseCursor::seekInTree(
         while (key.woCompare(
                         _cursor.node->keys[_cursor.index].getBSON(),
                         _ordering, false) == 0) {
-            next(parts);
+            next2(parts);
             if (!_cursor.node) {
                 return boost::none;
             }
@@ -731,9 +851,11 @@ boost::optional<IndexKeyEntry> PmseCursor::seekExact(
 }
 
 void PmseCursor::save() {
-    if(!_wasMoved)
+    /*if(!_wasMoved)
         moveToNext();
     _wasMoved = true;
+    std::cout << this <<" IC save" <<std::endl;
+    std::cout << this <<" IC save key="<<_cursor.node->keys[_cursor.index].getBSON().toString() <<std::endl;
     if(_cursor.node.raw_ptr()->off != 0)
     {
         _cursorKey = _cursor.node->keys[_cursor.index].getBSON();
@@ -743,7 +865,7 @@ void PmseCursor::save() {
     else
     {
         _eofRestore = true;
-    }
+    }*/
 
 }
 
@@ -753,42 +875,12 @@ void PmseCursor::saveUnpositioned() {
 void PmseCursor::restore() {
     persistent_ptr<PmseTreeNode> node;
     CursorObject _previousCursor;
-    uint64_t i;
-    int64_t cmp;
-    bool found = false;
+
+    std::cout << this <<" IC restore" <<std::endl;
     if(_eofRestore)
         return;
 
-    node = find_leaf(_tree->root, _cursorKey, _ordering);
-
-    for (i = 0; i < node->num_keys; i++) {
-        cmp = _cursorKey.woCompare(node->keys[i].getBSON(), _ordering, false);
-        if (cmp == 0 && _cursorId == node->values_array[i]) {
-            found = true;
-            break;
-        }
-    }
-    if(found)
-    {
-        _cursor.node = node;
-        _cursor.index = i;
-        found = false;
-    }
-    else
-    {
-        _previousCursor.node = node;
-        _previousCursor.index = i;
-        while(previous(_previousCursor))
-        {
-            cmp = _cursorKey.woCompare(_previousCursor.node->keys[_previousCursor.index].getBSON(), _ordering, false);
-            if(cmp==0 && _cursorId==_previousCursor.node->values_array[_previousCursor.index])
-            {
-                _cursor.node = _previousCursor.node;
-                _cursor.index = _previousCursor.index;
-                break;
-            }
-        }
-    }
+    _wasRestore=true;
 }
 
 void PmseCursor::detachFromOperationContext() {

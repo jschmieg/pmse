@@ -46,6 +46,7 @@ public:
                const bool unique);
     void setEndPosition(const BSONObj& key, bool inclusive);
     virtual boost::optional<IndexKeyEntry> next(RequestedInfo parts);
+    boost::optional<IndexKeyEntry> next2(RequestedInfo parts);
     boost::optional<IndexKeyEntry> seek(const BSONObj& key, bool inclusive,
                                         RequestedInfo parts);
     boost::optional<IndexKeyEntry> seek(const IndexSeekPoint& seekPoint,
@@ -100,6 +101,7 @@ private:
 
     bool _wasMoved;
     bool _eofRestore;
+    bool _wasRestore=false;
 
 };
 }
