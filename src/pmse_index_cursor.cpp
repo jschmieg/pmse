@@ -596,7 +596,7 @@ boost::optional<IndexKeyEntry> PmseCursor::seek(
     {
         _eofRestore = true;
     }
-    _wasMoved = true;
+    //_wasMoved = true;
     return entry;
 }
 

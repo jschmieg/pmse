@@ -94,6 +94,7 @@ Status PmseSortedDataInterface::insert(OperationContext* txn,
     try {
         transaction::exec_tx(pm_pool, [&] {
             obj = pmemobj_tx_alloc(owned.objsize(), 1);
+            std::cout << "insert alloc:" << obj.raw().off << std::endl;
             memcpy( (void*)obj.get(), owned.objdata(), owned.objsize());
         });
 
@@ -116,7 +117,7 @@ Status PmseSortedDataInterface::insert(OperationContext* txn,
 void PmseSortedDataInterface::unindex(OperationContext* txn, const BSONObj& key,
                                       const RecordId& loc, bool dupsAllowed) {
     BSONObj owned = key.getOwned();
-    std::cout << this <<" unindex key="<<key.toString() <<std::endl;
+    std::cout << this <<" unindex key="<<key.toString() << " loc="<< loc<<std::endl;
     try {
         transaction::exec_tx(pm_pool, [&] {
             if (tree->remove(pm_pool, owned, loc, dupsAllowed, _desc->keyPattern(), txn))

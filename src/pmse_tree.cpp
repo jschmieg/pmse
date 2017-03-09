@@ -110,22 +110,24 @@ bool PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
     node = locateLeafWithKey(root, key, _ordering);
     for(i=0;i<node->num_keys;i++)
     {
-        std::cout << "looked key="<<key.toString() <<"found node, key["<<i<<"]="<<node->keys[i].getBSON().toString() <<std::endl;
+        std::cout << "looked key="<<key.toString() <<"found node, key["<<i<<"]="<<node->keys[i].getBSON().toString()<<" value="<<(node->values_array[i]).repr() <<" loc="<<loc.repr() <<std::endl;
     }
     //find place in node
     for (i = 0; i < node->num_keys; i++) {
         key_record = node->values_array[i];
         cmp = key.woCompare(node->keys[i].getBSON(), _ordering, false);
         if (cmp == 0) {
-            std::cout << "looked key="<<key.toString() << " found key"<<node->keys[i].getBSON().toString() <<std::endl;
+            std::cout << "looked key="<<key.toString() << " found key"<<node->keys[i].getBSON().toString()<<" value="<<(node->values_array[i]).repr() <<" loc="<<loc.repr() <<std::endl;
             key_record = node->values_array[i];
             recordIndex = i;
             if (dupsAllowed) {
                 if (key_record.repr() != loc.repr()) {
+                    std::cout << this <<"key_record !=loc " <<std::endl;
                     while ((key.woCompare(node->keys[i].getBSON(), _ordering,
                                     false) == 0)
                                     && (node->values_array[i]).repr()
                                                     != loc.repr()) {
+                        std::cout << this <<" key["<<i<<"]= "<<node->keys[i].getBSON().toString() <<" value="<<(node->values_array[i]).repr() << " loc="<<loc.repr()  << " num_keys="<<node->num_keys <<std::endl;
                         if (i > 0) {
                             i--;
                         } else {
@@ -137,6 +139,39 @@ bool PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
                                 return false;
                             }
                         }
+                    }
+                    key_record = node->values_array[i];
+                    if (key_record.repr() != loc.repr())
+                    {
+                        if(i==(node->num_keys-1))
+                        {
+                            node = node->next;
+                            i = 0;
+                        }
+                        else
+                        {
+                            i++;
+                        }
+                        std::cout << this <<" Tree: going forward="<<key.toString() <<std::endl;
+                        while ((key.woCompare(node->keys[i].getBSON(), _ordering,
+                                        false) == 0)
+                                        && (node->values_array[i]).repr()
+                                                        != loc.repr()) {
+                            std::cout << this <<" key["<<i<<"]= "<<node->keys[i].getBSON().toString() <<" value="<<(node->values_array[i]).repr() << " loc="<<loc.repr() <<std::endl;
+                            if (i < node->num_keys-1) {
+                                i++;
+                            } else {
+                                if (node->next) {
+                                    node = node->next;
+                                    i = 0;
+                                } else {
+                                    std::cout << this <<" Tree: not found key="<<key.toString() <<std::endl;
+                                    return false;
+                                }
+                            }
+                        }
+                        std::cout << this <<"after while: key["<<i<<"]= "<<node->keys[i].getBSON().toString() <<" value="<<(node->values_array[i]).repr() << " loc="<<loc.repr() <<std::endl;
+
                     }
                 }
             }
@@ -201,7 +236,7 @@ bool PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
             return false;
         }
     }
-    std::cout << this <<" Tree: key to be removed: "<<key.toString() <<" will be removing="<<node->keys[i].getBSON().toString() <<std::endl;
+    std::cout << this <<" Tree: key to be removed: "<<key.toString()<< " loc="<<loc.repr() <<" will be removing="<<node->keys[i].getBSON().toString()<<" value="<<(node->values_array[i]).repr() <<std::endl;
     /*
      * Remove value
      */
@@ -224,8 +259,22 @@ persistent_ptr<PmseTreeNode> PmseTree::deleteEntry(
     persistent_ptr<PmseTreeNode> neighbor;
 
     // Remove key and pointer from node.
+    std::cout << "Delete entry="<<key.toString() << " i="<<index  << std::endl;
 
+    for(uint64_t i=0;i<node->num_keys;i++)
+    {
+        std::cout << "Delete entry, found node["<<i<<"]="<< node->keys[i].getBSON().toString()<<std::endl;
+        if(node->is_leaf)
+            std::cout << " value="<< node->values_array[i] << std::endl;
+    }
     node = removeEntryFromNode(key, node, index);
+
+    for(uint64_t i=0;i<node->num_keys;i++)
+    {
+        std::cout << "Delete entry, removed from node["<<i<<"]="<< node->keys[i].getBSON().toString() << std::endl;
+        if(node->is_leaf)
+            std::cout << " value="<< node->values_array[i] << std::endl;
+    }
 
     if (node == root) {
         return adjustRoot(root);
@@ -289,6 +338,8 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
     uint64_t i;
     persistent_ptr<PmseTreeNode> tmp;
 
+    std::cout << "redistributeNodes"  << std::endl;
+
     /* Case: n has a neighbor to the left.
      * Pull the neighbor's last key-pointer pair over
      * from the neighbor's right end to n's left end.
@@ -323,12 +374,14 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
             transaction::exec_tx(pop,
                             [&] {
                                 obj = pmemobj_tx_alloc(n->keys[0].getBSON().objsize(), 1);
+                                std::cout << "redistributeNodes alloc:" << obj.raw().off << std::endl;
                                 memcpy( (void*)obj.get(), n->keys[0].getBSON().objdata(), n->keys[0].getBSON().objsize());
                             });
 
             bsonPM = (n->parent->keys[k_prime_index]);
             if (bsonPM.data.raw().off != 0)
             {
+                std::cout << "redistributeNodes free:" << bsonPM.data.raw().off << std::endl;
                 pmemobj_tx_free(bsonPM.data.raw());
             }
 
@@ -354,12 +407,14 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
             transaction::exec_tx(pop,
                             [&] {
                                 obj = pmemobj_tx_alloc(neighbor->keys[1].getBSON().objsize(), 1);
+                                std::cout << "redistributeNodes alloc:" << obj.raw().off << std::endl;
                                 memcpy( (void*)obj.get(), neighbor->keys[1].getBSON().objdata(), neighbor->keys[1].getBSON().objsize());
                             });
 
             bsonPM = (n->parent->keys[k_prime_index]);
             if (bsonPM.data.raw().off != 0)
                 {
+                    std::cout << "redistributeNodes free:" << bsonPM.data.raw().off << std::endl;
                     pmemobj_tx_free(bsonPM.data.raw());
                 }
 
@@ -419,7 +474,7 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesceNodes(
     /* Swap neighbor with node if node is on the
      * extreme left and neighbor is to its right.
      */
-
+    std::cout << "coalesceNodes"  << std::endl;
     if (neighbor_index == -1) {
         tmp = n;
         n = neighbor;
@@ -447,6 +502,7 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesceNodes(
         persistent_ptr<char> obj;
 
         obj = pmemobj_tx_alloc(k_prime.getBSON().objsize(), 1);
+        std::cout << "coalesceNodes alloc:" << obj.raw().off << std::endl;
         memcpy((void*) obj.get(), k_prime.getBSON().objdata(),
                         k_prime.getBSON().objsize());
 
@@ -512,7 +568,7 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesceNodes(
     if (n->is_leaf) {
         delete_persistent<RecordId[TREE_ORDER]>(n->values_array);
     }
-
+    std::cout << "coalesceNodes free:" << n.raw().off << std::endl;
     delete_persistent<PmseTreeNode>(n);
 
     return root;
@@ -579,6 +635,7 @@ persistent_ptr<PmseTreeNode> PmseTree::adjustRoot(
 
     delete_persistent<BSONObj_PM[TREE_ORDER]>(root->keys);
     delete_persistent<RecordId[TREE_ORDER]>(root->values_array);
+    std::cout << "adjustRoot free:" << root.raw().off << std::endl;
     delete_persistent<PmseTreeNode>(root);
 
     return new_root;
@@ -594,6 +651,8 @@ persistent_ptr<PmseTreeNode> PmseTree::removeEntryFromNode(
     i = index;
     BSONObj_PM bsonPM;
     bsonPM = (node->keys[i]);
+    std::cout << "removeEntryFromNode free:" << bsonPM.data.raw().off << std::endl;
+
     pmemobj_tx_free(bsonPM.data.raw());
     i = index;
     for (++i; i < node->num_keys; i++) {
@@ -916,6 +975,7 @@ persistent_ptr<PmseTreeNode> PmseTree::insertToNodeAfterSplit(
 
     BSONObj_PM bsonPM;
     bsonPM = temp_keys_array[split-1];
+    std::cout << "insertToNodeAfterSplit free:" << bsonPM.data.raw().off << std::endl;
     if(bsonPM.data.raw().off!=0)
        pmemobj_tx_free(bsonPM.data.raw());
 
@@ -942,6 +1002,7 @@ persistent_ptr<PmseTreeNode> PmseTree::insertIntoNodeParent(
                     [&] {
                         obj = pmemobj_tx_alloc(key.getBSON().objsize(), 1);
                         memcpy( (void*)obj.get(), key.getBSON().objdata(), key.getBSON().objsize());
+                        std::cout << "insertIntoNodeParent alloc:" << obj.raw().off << std::endl;
 
                     });
 
@@ -998,7 +1059,7 @@ Status PmseTree::insert(pool_base pop, BSONObj_PM& key, const RecordId& loc,
     Status status = Status::OK();
     uint64_t i;
     int64_t cmp;
-
+    std::lock_guard<nvml::obj::mutex> lock(pmutex);
     if (!root)   //root not allocated yet
     {
         try {
