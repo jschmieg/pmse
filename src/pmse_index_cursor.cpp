@@ -121,7 +121,7 @@ void PmseCursor::setEndPosition(const BSONObj& key, bool inclusive) {
     if (!_tree->root) {
         return;
     }
-
+    std::cout << this <<" IC set end pos key="<<key.toString() <<std::endl;
     if (inclusive) {
         cursorType = key.firstElementType();
     } else {
@@ -149,6 +149,11 @@ void PmseCursor::setEndPosition(const BSONObj& key, bool inclusive) {
      * Find leaf node where key may exist
      */
     persistent_ptr<PmseTreeNode> node = find_leaf(_tree->root, key, _ordering);
+
+    for(i=0;i<node->num_keys;i++)
+    {
+        std::cout << "set end pos node key["<<i<<"]="<<node->keys[i].getBSON().toString() <<std::endl;
+    }
 
     if (node == nullptr) {
         _endPosition = nullptr;
@@ -299,8 +304,12 @@ void PmseCursor::setEndPosition(const BSONObj& key, bool inclusive) {
                 }
                 _endPosition = &(node->keys[i]);
             } else {
-                if (node->previous == nullptr) {
-                    _inf = MIN_END;
+                if (i == node->num_keys) {
+                    _endPosition = &(node->keys[i-1]);
+                }else{
+                    if (node->previous == nullptr) {
+                        _inf = MIN_END;
+                    }
                 }
             }
 
@@ -356,7 +365,7 @@ boost::optional<IndexKeyEntry> PmseCursor::next2(
     bool found = false;
     bool foundKey = false;
 
-    std::cout << this <<" IC next2" <<std::endl;
+    //std::cout << this <<" IC next2, end pos="<<_endPosition->getBSON().toString() <<std::endl;
 
     if(_wasRestore)
     {
@@ -605,6 +614,7 @@ boost::optional<IndexKeyEntry> PmseCursor::seekInTree(
                 const BSONObj& key, KeyString::Discriminator discriminator, RequestedInfo parts =
                                 kKeyAndLoc) {
     CursorObject _previousCursor;
+    boost::optional<IndexKeyEntry> entry;
     uint64_t i = 0;
     int cmp;
 
@@ -628,10 +638,27 @@ boost::optional<IndexKeyEntry> PmseCursor::seekInTree(
                                         _cursor.node->keys[_cursor.index].getBSON()
                                                         == _endPosition->getBSON()))
             return boost::none;
+        else{
 
-        return IndexKeyEntry(
+            entry = next2(parts);
+            if(entry.is_initialized())
+            {  if (_endPosition
+                                        && SimpleBSONObjComparator::kInstance.evaluate(
+                                                        _cursor.node->keys[_cursor.index].getBSON()
+                                                                        == _endPosition->getBSON()))
+                {
+                    return boost::none;
+                }
+            }
+            else
+            {
+                return entry;
+            }
+
+        }
+        /*return IndexKeyEntry(
                         _cursor.node->keys[_cursor.index].getBSON(),
-                        _cursor.node->values_array[_cursor.index]);
+                        _cursor.node->values_array[_cursor.index]);*/
     }
     //only in backward
     if (SimpleBSONObjComparator::kInstance.evaluate(key == max)) {
@@ -645,13 +672,20 @@ boost::optional<IndexKeyEntry> PmseCursor::seekInTree(
                                         _cursor.node->keys[_cursor.index].getBSON()
                                                         == _endPosition->getBSON()))
             return boost::none;
-
-        return IndexKeyEntry(
+        else{
+            return next2(parts);
+        }
+        /*return IndexKeyEntry(
                         _cursor.node->keys[_cursor.index].getBSON(),
-                        _cursor.node->values_array[_cursor.index]);
+                        _cursor.node->values_array[_cursor.index]);*/
     }
 
     node = find_leaf(_tree->root, key, _ordering);
+    for(i=0;i<node->num_keys;i++)
+    {
+        std::cout << "seek node key["<<i<<"]="<<node->keys[i].getBSON().toString() <<std::endl;
+    }
+
     if (node == NULL)
         return boost::none;
 
@@ -736,8 +770,8 @@ boost::optional<IndexKeyEntry> PmseCursor::seekInTree(
         while (key.woCompare(
                         _cursor.node->keys[_cursor.index].getBSON(),
                         _ordering, false) == 0) {
-            next2(parts);
-            if (!_cursor.node) {
+            entry = next2(parts);
+            if (!entry.is_initialized()) {
                 return boost::none;
             }
         }
