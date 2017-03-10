@@ -383,9 +383,11 @@ boost::optional<IndexKeyEntry> PmseCursor::next2(
             _eofRestore= false;
             return boost::none;
         }
-
+        std::cout << this <<" IC next2, _cursorKey=" << _cursorKey.toString()<<std::endl;
         node = find_leaf(_tree->root, _cursorKey, _ordering);
-
+        for(i=0;i<node->num_keys; i++) {
+            std::cout << this <<" IC node found, key["<<i<<"]=" << node->keys[i].getBSON().toString()<<std::endl;
+        }
         for (i = 0; i < node->num_keys; i++) {
             cmp = _cursorKey.woCompare(node->keys[i].getBSON(), _ordering, false);
             if (cmp == 0)
@@ -396,6 +398,10 @@ boost::optional<IndexKeyEntry> PmseCursor::next2(
                     found = true;
                     break;
                 }
+            }
+            if(cmp<0)   //stop iterating when found bigger
+            {
+                break;
             }
         }
         if(found)
@@ -428,7 +434,7 @@ boost::optional<IndexKeyEntry> PmseCursor::next2(
                 std::cout << this <<" IC next2 not found equal key" <<std::endl;
                 _cursor.node = node;
                 _cursor.index = i;
-                moveToNext();
+               // moveToNext();
             }
         }
         _wasMoved = true;
