@@ -639,32 +639,34 @@ boost::optional<IndexKeyEntry> PmseCursor::seekInTree(
     if (SimpleBSONObjComparator::kInstance.evaluate(key == min)) {
         _cursor.node = _first;
         _cursor.index = 0;
-        if (_endPosition
-                        && SimpleBSONObjComparator::kInstance.evaluate(
+        if (_endPosition)
+        {
+            if( SimpleBSONObjComparator::kInstance.evaluate(
                                         _cursor.node->keys[_cursor.index].getBSON()
                                                         == _endPosition->getBSON()))
-            return boost::none;
-        else{
+                return boost::none;
+            else{
 
-            entry = next2(parts);
-            if(entry.is_initialized())
-            {  if (_endPosition
-                                        && SimpleBSONObjComparator::kInstance.evaluate(
-                                                        _cursor.node->keys[_cursor.index].getBSON()
-                                                                        == _endPosition->getBSON()))
-                {
-                    return boost::none;
+                entry = next2(parts);
+                if(entry.is_initialized())
+                {  if (_endPosition
+                                            && SimpleBSONObjComparator::kInstance.evaluate(
+                                                            _cursor.node->keys[_cursor.index].getBSON()
+                                                                            == _endPosition->getBSON()))
+                    {
+                        return boost::none;
+                    }
                 }
-            }
-            else
-            {
-                return entry;
-            }
+                else
+                {
+                    return entry;
+                }
 
+            }
         }
-        /*return IndexKeyEntry(
+        return IndexKeyEntry(
                         _cursor.node->keys[_cursor.index].getBSON(),
-                        _cursor.node->values_array[_cursor.index]);*/
+                        _cursor.node->values_array[_cursor.index]);
     }
     //only in backward
     if (SimpleBSONObjComparator::kInstance.evaluate(key == max)) {
@@ -812,7 +814,7 @@ boost::optional<IndexKeyEntry> PmseCursor::seekInTree(
             /*
              * Get previous until are not equal
              */
-            while (!key.woCompare(
+            while (key.woCompare(
                             _previousCursor.node->keys[_previousCursor.index].getBSON(),
                             _ordering, false)) {
                 _cursor.node = _previousCursor.node;

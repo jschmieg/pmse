@@ -172,10 +172,10 @@ Status PmseRecordStore::updateRecord(OperationContext* txn, const RecordId& oldL
 
 void PmseRecordStore::deleteRecord(OperationContext* txn,
                                       const RecordId& dl) {
-    persistent_ptr<KVPair> p;
+    /*persistent_ptr<KVPair> p;
     _mapper->getPair(dl.repr(), p);
     _mapper->remove((uint64_t) dl.repr(), txn);
-    _mapper->changeSize(-p->ptr->size);
+    _mapper->changeSize(-p->ptr->size);*/
 }
 
 void PmseRecordStore::setCappedCallback(CappedCallback* cb) {
