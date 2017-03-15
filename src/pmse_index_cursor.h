@@ -65,10 +65,14 @@ public:
 private:
     boost::optional<IndexKeyEntry> seekInTree(const BSONObj& key, KeyString::Discriminator discriminator,
                                         RequestedInfo parts);
+    bool seekKeyInTree(const BSONObj& key, KeyString::Discriminator discriminator,
+                                        RequestedInfo parts, CursorObject& location);
     persistent_ptr<PmseTreeNode> find_leaf(persistent_ptr<PmseTreeNode> node,
                                            const BSONObj& key,
                                            const BSONObj& _ordering);
-    bool previous(CursorObject&);
+    bool findNearest(const BSONObj& key, const BSONObj& _ordering, CursorObject& location);
+    bool getPrevious(CursorObject&);
+    bool getNext(CursorObject&);
     bool correctType(BSONObj record);
     void moveToNext();
 

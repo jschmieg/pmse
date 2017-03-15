@@ -359,7 +359,7 @@ boost::optional<IndexKeyEntry> PmseCursor::next(
     return boost::none;
 }
 
-bool PmseCursor::previous(CursorObject& _cursor) {
+bool PmseCursor::getPrevious(CursorObject& _cursor) {
     if (_cursor.index == 0) {
         /*
          * It is first element, move to prev node
@@ -379,6 +379,25 @@ bool PmseCursor::previous(CursorObject& _cursor) {
         return true;
     }
 
+}
+
+bool PmseCursor::getNext(CursorObject& _cursor) {
+    if (_cursor.index < (_cursor.node->num_keys - 1)) {
+        _cursor.index++;
+        return true;
+    } else {
+        /*
+         * Move to next node - if it exist
+         */
+        if (_cursor.node->next != nullptr) {
+            _cursor.node = _cursor.node->next;
+            _cursor.index = 0;
+            return true;
+        } else {
+            _cursor.node = nullptr;
+            return false;
+        }
+    }
 }
 
 /*
@@ -476,8 +495,156 @@ void PmseCursor::moveToNext() {
 boost::optional<IndexKeyEntry> PmseCursor::seek(
                 const BSONObj& key, bool inclusive, RequestedInfo parts =
                                 kKeyAndLoc) {
+    CursorObject _location;
     const auto discriminator = inclusive ? KeyString::kInclusive : KeyString::kExclusiveBefore;
-    return seekInTree(key, discriminator, parts);
+    std::cout << " Seek key = "<<key.toString() <<std::endl;
+    //return seekInTree(key, discriminator, parts);
+    return seekKeyInTree(key, discriminator, parts, &_location);
+}
+
+
+/**
+ * Find node with given key: it must be node with key that is equal to looked one
+ * or (if exact key is missing) nearest bigger key.
+ * It also is first of values, in case of non-unique keys.
+ * Return true on exact match.
+ */
+bool PmseCursor::findNearest(const BSONObj& key,
+                const BSONObj& _ordering, CursorObject& _location) {
+    persistent_ptr<PmseTreeNode> node;
+    uint64_t i;
+    int64_t cmp;
+    bool found = false;
+    CursorObject location;
+    CursorObject previousCursor;
+
+    /**
+     * Find node with looked key in it.
+     */
+    node = find_leaf(_tree->root, key, _ordering);
+    for(i=0;i<node->num_keys; i++) {
+        std::cout << "Node found,key["<<i<<"] = "<<node->keys[i].getBSON().toString() <<std::endl;
+    }
+
+    /**
+     * Find localization of key in that node
+     */
+    for (i = 0; i < node->num_keys; i++) {
+       cmp = key.woCompare(node->keys[i].getBSON(), _ordering, false);
+       std::cout << "i="<< i <<" cmp="<<cmp <<std::endl;
+       /**
+        * Found exact value
+        */
+       if(cmp==0) {
+           found = true;
+           break;
+       }
+       /**
+        * Found bigger value, so there is no exact value
+        */
+       if (cmp < 0) {
+           found = false;
+           break;
+       }
+    }
+
+    if(found) {
+        std::cout << "Found exact = "<<node->keys[i].getBSON().toString() <<std::endl;
+        /**
+         * Iterate-back if there are many identical keys.
+         */
+        location.node = node;
+        location.index = i;
+        previousCursor.node = node;
+        previousCursor.index = i;
+
+        while(getPrevious(previousCursor)){
+            std::cout << "Iterate back = "<<previousCursor.node->keys[previousCursor.index].getBSON().toString() <<std::endl;
+            /**
+             * Previous is different, so do not continue
+             */
+            if(key.woCompare(previousCursor.node->keys[previousCursor.index].getBSON(), _ordering, false)) {
+                break;
+            }
+            /**
+             * Previous is equal, so continue
+             */
+            else {
+                location.node = previousCursor.node;
+                location.index = previousCursor.index;
+            }
+        }
+        std::cout << "Found exact after iterating= "<<location.node->keys[location.index].getBSON().toString() <<std::endl;
+    }
+    else {
+        /**
+         * Not found bigger or equal
+         */
+        if(i == node->num_keys) {
+            std::cout << "Not found exact or bigger. Getting next. " <<std::endl;
+            location.node = node;
+            location.index = i-1;
+            if(getNext(location)){
+                std::cout << "Found bigger = "<<location.node->keys[location.index].getBSON().toString() <<std::endl;
+            }
+            else
+            {
+                std::cout << "Not found next." <<std::endl;
+            }
+        }
+        else {
+            std::cout << "Found bigger = "<<node->keys[i].getBSON().toString() <<std::endl;
+        }
+    }
+
+    /**
+     * Set location object
+     */
+    _location.node = location.node;
+    _location.index = location.index;
+
+    return found ? true : false;
+}
+
+/**
+ * Search for key in tree, depending on discriminator, end position, object type, direction.
+ */
+bool PmseCursor::seekKeyInTree(
+                const BSONObj& key, KeyString::Discriminator discriminator, RequestedInfo parts =
+                                kKeyAndLoc, CursorObject &_location) {
+    bool foundKey = false;
+
+    foundKey = findNearest(key, _ordering, _location);
+    /**
+     * Exact key was found.
+     */
+    if(foundKey)
+    {
+        /**
+         * Return exact match if it exist
+         */
+        if(discriminator == KeyString::kInclusive)
+        {
+            return true;
+        }
+        /**
+         * Return next value
+         */
+        else
+        {
+            getNext(_location);
+            return true;
+        }
+    }
+
+    /**
+     * Exact key was not found. Return nearest in direction of _forward.
+     */
+    else
+    {
+
+    }
+    return false;
 }
 
 
@@ -648,7 +815,7 @@ boost::optional<IndexKeyEntry> PmseCursor::seekInTree(
             _cursor.index = i;
             _previousCursor.node = node;
             _previousCursor.index = i;
-            previous(_previousCursor);
+            getPrevious(_previousCursor);
             /*
              * Get previous until are not equal
              */
@@ -657,7 +824,7 @@ boost::optional<IndexKeyEntry> PmseCursor::seekInTree(
                             _ordering, false)) {
                 _cursor.node = _previousCursor.node;
                 _cursor.index = _previousCursor.index;
-                if (!previous(_previousCursor)) {
+                if (!getPrevious(_previousCursor)) {
                     /*
                      * There are no more prev
                      */
@@ -778,7 +945,7 @@ void PmseCursor::restore() {
     {
         _previousCursor.node = node;
         _previousCursor.index = i;
-        while(previous(_previousCursor))
+        while(getPrevious(_previousCursor))
         {
             cmp = _cursorKey.woCompare(_previousCursor.node->keys[_previousCursor.index].getBSON(), _ordering, false);
             if(cmp==0 && _cursorId==_previousCursor.node->values_array[_previousCursor.index])
