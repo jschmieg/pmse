@@ -39,6 +39,7 @@
 #include <libpmemobj++/pext.hpp>
 #include <libpmemobj++/utils.hpp>
 
+
 #include <cmath>
 #include <string>
 #include <map>
@@ -220,6 +221,7 @@ class PmseRecordStore : public RecordStore {
     const StringData _DBPATH;
     pool<root> mapPool;
     persistent_ptr<PmseMap<InitData>> _mapper;
+
 };
 }  // namespace mongo
 #endif  // SRC_PMSE_RECORD_STORE_H_

@@ -47,7 +47,7 @@
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/make_persistent_array.hpp>
 #include <libpmemobj++/detail/pexceptions.hpp>
-
+#include "libpmemobj++/mutex.hpp"
 using namespace nvml::obj;
 
 namespace mongo {
@@ -205,6 +205,7 @@ public:
     uint64_t getMaxSize() const {
         return _maxDocuments;
     }
+    nvml::obj::mutex pmutex;
 private:
     const int _size;
     const bool _isCapped;
@@ -217,6 +218,7 @@ private:
     p<uint64_t> _counterCapped = 0;
     persistent_ptr<persistent_ptr<PmseListIntPtr>[]> _list;
     persistent_ptr<KVPair> _deleted;
+
 
     persistent_ptr<KVPair> getFirstPtr(int listNumber) {
         if (listNumber < _size)

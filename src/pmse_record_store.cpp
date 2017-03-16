@@ -117,6 +117,7 @@ PmseRecordStore::PmseRecordStore(StringData ns,
 StatusWith<RecordId> PmseRecordStore::insertRecord(OperationContext* txn,
                                                       const char* data, int len,
                                                       bool enforceQuota) {
+    std::lock_guard<nvml::obj::mutex> lock(_mapper->pmutex);
     if (isCapped() && len > (int)_mapper->getMax()) {
         return StatusWith<RecordId>(ErrorCodes::BadValue, "object to insert exceeds cappedMaxSize");
     }
@@ -150,6 +151,7 @@ StatusWith<RecordId> PmseRecordStore::insertRecord(OperationContext* txn,
 Status PmseRecordStore::updateRecord(OperationContext* txn, const RecordId& oldLocation,
                                      const char* data, int len, bool enforceQuota,
                                      UpdateNotifier* notifier) {
+    std::lock_guard<nvml::obj::mutex> lock(_mapper->pmutex);
     persistent_ptr<InitData> obj;
     try {
         transaction::exec_tx(mapPool, [&] {
@@ -172,7 +174,8 @@ Status PmseRecordStore::updateRecord(OperationContext* txn, const RecordId& oldL
 
 void PmseRecordStore::deleteRecord(OperationContext* txn,
                                       const RecordId& dl) {
-    /*persistent_ptr<KVPair> p;
+   /* std::lock_guard<nvml::obj::mutex> lock(_mapper->pmutex);
+    persistent_ptr<KVPair> p;
     _mapper->getPair(dl.repr(), p);
     _mapper->remove((uint64_t) dl.repr(), txn);
     _mapper->changeSize(-p->ptr->size);*/
@@ -317,6 +320,7 @@ Status PmseRecordStore::validate(OperationContext* txn,
 }
 
 boost::optional<Record> PmseRecordCursor::next() {
+    std::lock_guard<nvml::obj::mutex> lock(_mapper->pmutex);
     if(_eof)
         return boost::none;
     if(_lastMoveWasRestore) {
@@ -337,6 +341,7 @@ boost::optional<Record> PmseRecordCursor::next() {
 }
 
 boost::optional<Record> PmseRecordCursor::seekExact(const RecordId& id) {
+    std::lock_guard<nvml::obj::mutex> lock(_mapper->pmutex);
     persistent_ptr<InitData> obj = nullptr;
     bool status = _mapper->getPair(id.repr(), _cur);
     if(_cur == nullptr || _cur->ptr == nullptr) {
