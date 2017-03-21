@@ -309,6 +309,7 @@ void PmseCursor::setEndPosition(const BSONObj& key, bool inclusive) {
 boost::optional<IndexKeyEntry> PmseCursor::next(
                 RequestedInfo parts = kKeyAndLoc) {
     boost::optional<IndexKeyEntry> entry;
+    std::lock_guard<nvml::obj::mutex> lock(_tree->pmutex);
     /**
      * Find next correct value for cursor
      */
@@ -577,11 +578,16 @@ boost::optional<IndexKeyEntry> PmseCursor::seek(
                 const BSONObj& key, bool inclusive, RequestedInfo parts =
                                 kKeyAndLoc) {
     boost::optional<IndexKeyEntry> entry;
+    std::cout << this <<" IC seek before"<< key.toString() <<std::endl;
+    std::lock_guard<nvml::obj::mutex> lock(_tree->pmutex);
+    std::cout << this <<" IC seek in"<< key.toString() <<std::endl;
     const auto discriminator = inclusive ? KeyString::kInclusive : KeyString::kExclusiveBefore;
     /**
      * Remember current search result to return it
      */
     entry = seekInTree(key, discriminator, parts);
+    if (entry)
+            std::cout << this <<" IC seek return="<< entry.get().key.toString() <<std::endl;
     /**
      * Remember next value to find it on next in case of deletion
      */

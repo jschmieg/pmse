@@ -98,26 +98,38 @@ bool PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
                       bool dupsAllowed, const BSONObj& ordering, OperationContext* txn = nullptr) {
 
     persistent_ptr<PmseTreeNode> node;
+    persistent_ptr<PmseTreeNode> tempNode;
     RecordId key_record;
     uint64_t recordIndex;
     uint64_t i;
     int64_t cmp;
+    std::cout << this <<" Tree:  1tree remove key="<<key.toString()<<" root="<<root.raw_ptr()->off <<std::endl;
+    std::lock_guard<nvml::obj::mutex> lock(pmutex);
+    std::cout << this <<" Tree:  2removing key="<<key.toString() <<std::endl;
     _ordering = ordering;
     //find node with key
     node = locateLeafWithKey(root, key, _ordering);
+    tempNode = node;
+    for(i=0;i<node->num_keys;i++)
+    {
+        std::cout << "looked key="<<key.toString() <<"found node, key["<<i<<"]="<<node->keys[i].getBSON().toString()<<" value="<<(node->values_array[i]).repr() <<" loc="<<loc.repr() <<std::endl;
+    }
     //find place in node
     for (i = 0; i < node->num_keys; i++) {
         key_record = node->values_array[i];
         cmp = key.woCompare(node->keys[i].getBSON(), _ordering, false);
         if (cmp == 0) {
+            std::cout << "looked key="<<key.toString() << " found key"<<node->keys[i].getBSON().toString()<<" value="<<(node->values_array[i]).repr() <<" loc="<<loc.repr() <<std::endl;
             key_record = node->values_array[i];
             recordIndex = i;
             if (dupsAllowed) {
                 if (key_record.repr() != loc.repr()) {
+                    std::cout << this <<"key_record !=loc " <<std::endl;
                     while ((key.woCompare(node->keys[i].getBSON(), _ordering,
                                     false) == 0)
                                     && (node->values_array[i]).repr()
                                                     != loc.repr()) {
+                        std::cout << this <<" key["<<i<<"]= "<<node->keys[i].getBSON().toString() <<" value="<<(node->values_array[i]).repr() << " loc="<<loc.repr()  << " num_keys="<<node->num_keys <<std::endl;
                         if (i > 0) {
                             i--;
                         } else {
@@ -125,8 +137,42 @@ bool PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
                                 node = node->previous;
                                 i = node->num_keys - 1;
                             } else {
+                                std::cout << this <<" Tree: not found key="<<key.toString() <<std::endl;
                                 return false;
                             }
+                        }
+                    }
+                    key_record = node->values_array[i];
+                    if (key_record.repr() != loc.repr())
+                    {
+                        /**
+                         * Start looking for in other direction, staring from node returned by find_node().
+                         */
+                        node = tempNode;
+                        i=0;
+                        std::cout << this <<" Tree: going forward="<<key.toString() <<std::endl;
+                        while ((key.woCompare(node->keys[i].getBSON(), _ordering,
+                                        false) == 0)
+                                        && (node->values_array[i]).repr()
+                                                        != loc.repr()) {
+                            std::cout << this <<" key["<<i<<"]= "<<node->keys[i].getBSON().toString() <<" value="<<(node->values_array[i]).repr() << " loc="<<loc.repr() <<std::endl;
+                            if (i < node->num_keys-1) {
+                                i++;
+                            } else {
+                                if (node->next) {
+                                    node = node->next;
+                                    i = 0;
+                                } else {
+                                    std::cout << this <<" Tree: not found key="<<key.toString() <<std::endl;
+                                    return false;
+                                }
+                            }
+                        }
+
+                        std::cout << this <<"after while: key["<<i<<"]= "<<node->keys[i].getBSON().toString() <<" value="<<(node->values_array[i]).repr() << " loc="<<loc.repr() <<std::endl;
+                        if(key.woCompare(node->keys[i].getBSON(), _ordering, false) != 0){
+                            std::cout << this <<" Tree: not found key="<<key.toString() <<std::endl;
+                            return false;
                         }
                     }
                 }
@@ -138,41 +184,62 @@ bool PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
             break;
         }
     }
+    std::cout <<"looked key="<<key.toString() <<" Tree: after looking key, i="<<i<< "num_keys="<< node->num_keys <<std::endl;
     //didn't find value in node - it must be in previous one - only for non-unique values
     if(i==(node->num_keys))
     {
-
+        std::cout <<"looked key="<<key.toString() <<" i=num keys dups=" <<dupsAllowed  <<std::endl;
         if (dupsAllowed) {
+            std::cout <<"looked key="<<key.toString() <<" dups allowed" <<std::endl;
             if(node->previous)
             {
+                std::cout <<"looked key="<<key.toString() <<" node->prev" <<std::endl;
                 node=node->previous;
                 i = node->num_keys-1;
-                while((key.woCompare(node->keys[i].getBSON(), _ordering, false)==0) && (node->values_array[i]).repr() != loc.repr())
+                if((key.woCompare(node->keys[i].getBSON(), _ordering, false)==0))
                 {
-                    if(i>0)
+                    std::cout <<"looked key="<<key.toString() <<" checked key="<<node->keys[i].getBSON() <<std::endl;
+                    while((key.woCompare(node->keys[i].getBSON(), _ordering, false)==0) && (node->values_array[i]).repr() != loc.repr())
                     {
-                        i--;
-                    }
-                    else
-                    {
-                        if(node->previous)
+                        std::cout <<"looked key="<<key.toString() <<" iterating back, key="<<node->keys[i].getBSON().toString()<<std::endl;
+                        if(i>0)
                         {
-                            node=node->previous;
-                            i = node->num_keys-1;
+                            i--;
                         }
                         else
                         {
-                            return false;
+                            if(node->previous)
+                            {
+                                node=node->previous;
+                                i = node->num_keys-1;
+                            }
+                            else
+                            {
+                                std::cout << this <<"not found key="<<key.toString() <<std::endl;
+                                return false;
+                            }
                         }
                     }
+                }
+                else{
+                    std::cout << this <<" Tree: not found key="<<key.toString() <<std::endl;
+                    return false;
                 }
             }
             else
             {
+                std::cout << this <<" Tree: not found key="<<key.toString() <<std::endl;
                 return false;
             }
         }
+        else
+        {
+            std::cout << this <<" Tree: not found key="<<key.toString() <<std::endl;
+            return false;
+        }
     }
+
+    std::cout << this <<" Tree: key to be removed: "<<key.toString()<< " loc="<<loc.repr() <<" will be removing="<<node->keys[i].getBSON().toString()<<" value="<<(node->values_array[i]).repr() <<std::endl;
 
     /*
      * Remove value
@@ -181,6 +248,7 @@ bool PmseTree::remove(pool_base pop, BSONObj& key, const RecordId& loc,
         txn->recoveryUnit()->registerChange(new RemoveIndexChange(pop, key, loc, dupsAllowed, ordering));
 
     root = deleteEntry(pop, key, node, i);
+    std::cout << this <<" Tree:  3removed key="<<key.toString() <<std::endl;
     return true;
 }
 
@@ -469,12 +537,19 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesceNodes(
     }
 
     k_prime_temp = k_prime.getBSON();
-    for (i = 0; i < n->parent->num_keys; i++) {
-        int cmp = k_prime_temp.woCompare(n->parent->keys[i].getBSON(),
-                        _ordering, false);
-        if (cmp == 0) {
-            break;
+    if(neighbor_index==-1)
+    {
+        for (i = 0; i < n->parent->num_keys; i++) {
+            int cmp = k_prime_temp.woCompare(n->parent->keys[i].getBSON(),
+                            _ordering, false);
+            if (cmp == 0) {
+                break;
+            }
         }
+    }
+    else
+    {
+        i = neighbor_index;
     }
 
     root = deleteEntry(pop, k_prime_temp, n->parent, i);
