@@ -46,6 +46,9 @@
 #include "mongo/db/storage/sorted_data_interface.h"
 #include "mongo/db/index/index_descriptor.h"
 
+#include <boost/thread/locks.hpp>
+#include <boost/thread/shared_mutex.hpp>
+
 using namespace nvml::obj;
 
 namespace mongo {
@@ -90,6 +93,7 @@ struct PmseTreeNode {
     persistent_ptr<PmseTreeNode> parent = nullptr;
     p<bool> is_leaf = false;
     nvml::obj::shared_mutex _pmutex;
+//    boost::shared_mutex _pmutex;
 };
 
 struct CursorObject {
@@ -99,6 +103,8 @@ struct CursorObject {
 
 class LocksPtr {
  public:
+//    LocksPtr(boost::shared_mutex *_ptr) : ptr(_ptr){}
+//    boost::shared_mutex *ptr;
     LocksPtr(nvml::obj::shared_mutex *_ptr) : ptr(_ptr){}
     nvml::obj::shared_mutex *ptr;
 };

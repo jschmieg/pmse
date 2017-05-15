@@ -489,7 +489,9 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
                 const BSONObj& ordering, std::list<LocksPtr>& locks) {
     uint64_t i = 0;
     int64_t cmp;
+//    std::cout << "locateLeafWithKeyPM lock entry= "<< entry.loc.repr() << std::endl;
     (node->_pmutex).lock();
+//    std::cout << "locateLeafWithKeyPM locked entry= "<< entry.loc.repr() << std::endl;
     locks.push_back(LocksPtr(&(node->_pmutex)));
     std::list<LocksPtr>::const_iterator iterator;
     persistent_ptr<PmseTreeNode> current = node;
@@ -840,6 +842,7 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
         } catch (std::exception &e) {
             std::cout << e.what() << std::endl;
         }
+//        std::cout << "insert unlock all "<< entry.loc.repr() << std::endl;
         unlockTree(locks);
         return status;
     }
@@ -854,6 +857,7 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
     } catch (std::exception &e) {
         log() << e.what();
     }
+//    std::cout << "insert unlock all "<< entry.loc.repr() << std::endl;
     unlockTree(locks);
     return Status::OK();
 }
