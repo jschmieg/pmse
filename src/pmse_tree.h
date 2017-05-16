@@ -144,7 +144,7 @@ class PmseTree {
     Status insertKeyIntoLeaf(persistent_ptr<PmseTreeNode> node, IndexKeyEntry& entry, const BSONObj& _ordering);
     persistent_ptr<PmseTreeNode> locateLeafWithKeyPM(
                     persistent_ptr<PmseTreeNode> node, IndexKeyEntry& entry,
-                    const BSONObj& _ordering, std::list<LocksPtr>& locks);
+                    const BSONObj& _ordering, std::list<LocksPtr>& locks, persistent_ptr<PmseTreeNode>& lockNode);
     persistent_ptr<PmseTreeNode> splitFullNodeAndInsert(
                     pool_base pop, persistent_ptr<PmseTreeNode> node,
                     IndexKeyEntry& entry, const BSONObj& _ordering);
