@@ -32,14 +32,16 @@
 
 #define MONGO_LOG_DEFAULT_COMPONENT ::mongo::logger::LogComponent::kStorage
 
+#include "pmse_tree.h"
+#include "pmse_sorted_data_interface.h"
+#include "pmse_change.h"
+
+#include <list>
+
 #include "mongo/platform/basic.h"
 #include "mongo/db/storage/sorted_data_interface.h"
 #include "mongo/util/log.h"
 #include "mongo/stdx/memory.h"
-
-#include "pmse_tree.h"
-#include "pmse_sorted_data_interface.h"
-#include "pmse_change.h"
 
 #include "libpmemobj++/transaction.hpp"
 #include "libpmemobj++/make_persistent_array.hpp"
@@ -76,13 +78,12 @@ bool PmseTree::remove(pool_base pop, IndexKeyEntry& entry,
     uint64_t i;
     int64_t cmp;
     std::list<LocksPtr> locks;
-    persistent_ptr<PmseTreeNode> lockP;
-    stdx::unique_lock<nvml::obj::shared_mutex> lock(_pmutex);
+    persistent_ptr<PmseTreeNode> lockNode;
     _ordering = ordering;
     // find node with key
     if (!_root)
         return false;
-    node = locateLeafWithKeyPM(_root, entry, _ordering, locks, lockP);
+    node = locateLeafWithKeyPM(_root, entry, _ordering, locks, lockNode);
 
     for (i = 0; i < node->num_keys; i++) {
         cmp = IndexKeyEntry_PM::compareEntries(entry, node->keys[i], _ordering);
@@ -92,9 +93,17 @@ bool PmseTree::remove(pool_base pop, IndexKeyEntry& entry,
     }
     // not found
     if (i == node->num_keys) {
+        if (lockNode) {
+               lockNode->_pmutex.unlock();
+           }
+        unlockTree(locks);
         return false;
     }
     _root = deleteEntry(pop, entry, node, i);
+    if (lockNode) {
+       lockNode->_pmutex.unlock();
+    }
+    unlockTree(locks);
     return true;
 }
 
@@ -462,27 +471,19 @@ persistent_ptr<PmseTreeNode> PmseTree::makeTreeRoot(IndexKeyEntry& entry) {
     (n->keys[0]).data = pmemobj_tx_alloc(entry.key.objsize(), 1);
     memcpy(static_cast<void*>((n->keys[0]).data.get()), entry.key.objdata(), entry.key.objsize());
     (n->keys[0]).loc = entry.loc.repr();
-
     n->num_keys = n->num_keys + 1;
     n->next = nullptr;
     n->previous = nullptr;
     n->parent = nullptr;
     return n;
 }
-void PmseTree::unlockParents(persistent_ptr<PmseTreeNode> node, std::list<LocksPtr>& locks) {
-    std::list<LocksPtr>::const_iterator iterator;
-    for (iterator = locks.begin(); iterator != locks.end(); ++iterator) {
-            iterator->ptr->unlock();
-    }
-    locks.erase(locks.begin(),locks.end());
-}
 
 bool PmseTree::nodeIsSafeForInsert(persistent_ptr<PmseTreeNode> node) {
     if (node->num_keys < (TREE_ORDER-1)) {
         return true;
-    }
-    else
+    } else {
         return false;
+    }
 }
 
 persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
@@ -490,15 +491,12 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
                 const BSONObj& ordering, std::list<LocksPtr>& locks, persistent_ptr<PmseTreeNode>& lockNode) {
     uint64_t i = 0;
     int64_t cmp;
-//    std::cout << "locateLeafWithKeyPM lock entry= "<< entry.loc.repr() << std::endl;
     (node->_pmutex).lock();
-//    std::cout << "locateLeafWithKeyPM locked entry= "<< entry.loc.repr() << std::endl;
     locks.push_back(LocksPtr(&(node->_pmutex)));
     persistent_ptr<PmseTreeNode> current = node;
 
     if (current == nullptr)
         return current;
-
 
     while (!current->is_leaf) {
         i = 0;
@@ -513,16 +511,13 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
         (current->children_array[i]->_pmutex).lock();
         current = current->children_array[i];
         if (nodeIsSafeForInsert(current)) {
-            unlockParents(current, locks);
+            unlockTree(locks);
         }
         locks.push_back(LocksPtr(&(current->_pmutex)));
-
     }
-    if (current->next){
+    if (current->next) {
         current->next->_pmutex.lock();
         lockNode = current->next;
-//        std::cout <<"node next lock="<<current->next.raw().off <<std::endl;
-
     }
     return current;
 }
@@ -614,21 +609,11 @@ persistent_ptr<PmseTreeNode> PmseTree::splitFullNodeAndInsert(
     /*
      * Update pointers next, previous
      */
-    /*if (node->next){
-        std::cout <<"node next lock="<<node->next.raw().off <<std::endl;
-        node->next->_pmutex.lock();
-    }*/
-
     new_leaf->next = node->next;
-    if (node->next){
+    if (node->next) {
         node->next->previous = new_leaf;
-
     }
     node->next = new_leaf;
-    /*if(new_leaf->next) {
-        std::cout <<"new leaf next unlock="<<new_leaf->next.raw().off <<std::endl;
-        new_leaf->next->_pmutex.unlock();
-    }*/
     new_leaf->previous = node;
 
     /*
@@ -798,9 +783,8 @@ void PmseTree::unlockTree(std::list<LocksPtr>& locks) {
         for (iterator = locks.begin(); iterator != locks.end(); ++iterator) {
             iterator->ptr->unlock();
         }
-        locks.erase(locks.begin(),locks.end());
-    }catch(std::exception &e){}
-
+        locks.erase(locks.begin(), locks.end());
+    }catch(std::exception &e) {}
 }
 
 Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
@@ -813,8 +797,6 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
     persistent_ptr<PmseTreeNode> lockNode;
 
     if (!_root) {
-//        stdx::unique_lock<nvml::obj::shared_mutex> lock(_pmutex);
-
         // root not allocated yet
         try {
             transaction::exec_tx(pop, [this, &entry] {
@@ -862,10 +844,8 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
         } catch (std::exception &e) {
             std::cout << e.what() << std::endl;
         }
-//        std::cout << "insert unlock all "<< entry.loc.repr() << std::endl;
         unlockTree(locks);
-        if (lockNode){
-//           std::cout <<"node next unlock="<<std::endl;
+        if (lockNode) {
            lockNode->_pmutex.unlock();
        }
         return status;
@@ -881,11 +861,9 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
     } catch (std::exception &e) {
         log() << e.what();
     }
-    if (lockNode){
-//       std::cout <<"node next unlock="<<std::endl;
+    if (lockNode) {
        lockNode->_pmutex.unlock();
-   }
-//    std::cout << "insert unlock all "<< entry.loc.repr() << std::endl;
+    }
     unlockTree(locks);
     return Status::OK();
 }

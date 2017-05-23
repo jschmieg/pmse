@@ -115,7 +115,6 @@ class PmseCursor final : public SortedDataInterface::Cursor {
      */
     boost::optional<IndexKeyEntry> _endPosition;
     CursorObject _cursor;
-
     CursorObject _returnValue;
     static IndexKeyEntry_PM min;
     static IndexKeyEntry_PM max;
