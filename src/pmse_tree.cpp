@@ -503,9 +503,15 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
                 persistent_ptr<PmseTreeNode>& lockNode, bool insert) {
     uint64_t i = 0;
     int64_t cmp;
-    (node->_pmutex).lock();
-    locks.push_back(LocksPtr(&(node->_pmutex)));
     persistent_ptr<PmseTreeNode> current = node;
+
+    if(current->is_leaf){
+        (current->_pmutex).lock();
+        locks.push_back(LocksPtr(&(current->_pmutex)));
+        return current;
+    }
+
+    (node->_pmutex).lock_shared();
 
     if (current == nullptr)
         return current;
@@ -520,13 +526,50 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
                 break;
             }
         }
-        (current->children_array[i]->_pmutex).lock();
-        current = current->children_array[i];
-        if (nodeIsSafeForOperation(current, insert)) {
-            unlockTree(locks);
+        if(current->children_array[i]->is_leaf){
+            (current->children_array[i]->_pmutex).lock();
+            locks.push_back(LocksPtr(&(current->children_array[i]->_pmutex)));
         }
-        locks.push_back(LocksPtr(&(current->_pmutex)));
+        else{
+            (current->children_array[i]->_pmutex).lock_shared();
+        }
+        current->_pmutex.unlock_shared();
+        current = current->children_array[i];
     }
+    if (!nodeIsSafeForOperation(current, insert)){
+        unlockTree(locks);
+        current = _root;
+        (node->_pmutex).lock();
+        locks.push_back(LocksPtr(&(node->_pmutex)));
+        persistent_ptr<PmseTreeNode> current = node;
+
+        if (current == nullptr)
+            return current;
+
+        while (!current->is_leaf) {
+            i = 0;
+            while (i < current->num_keys) {
+                cmp = IndexKeyEntry_PM::compareEntries(entry, current->keys[i], ordering);
+                if (cmp >= 0) {
+                    i++;
+                } else {
+                    break;
+                }
+            }
+            (current->children_array[i]->_pmutex).lock();
+            current = current->children_array[i];
+            if (nodeIsSafeForOperation(current, insert)) {
+                unlockTree(locks);
+            }
+            locks.push_back(LocksPtr(&(current->_pmutex)));
+        }
+        if (current->next) {
+            current->next->_pmutex.lock();
+            lockNode = current->next;
+        }
+        return current;
+    }
+
     if (current->next) {
         current->next->_pmutex.lock();
         lockNode = current->next;
@@ -823,7 +866,6 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
         return status;
     }
     node = locateLeafWithKeyPM(_root, entry, ordering, locks, lockNode, true);
-
     /*
      * Duplicate key check
      */
