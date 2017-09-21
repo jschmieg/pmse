@@ -77,13 +77,13 @@ bool PmseTree::remove(pool_base pop, IndexKeyEntry& entry,
     persistent_ptr<PmseTreeNode> node;
     uint64_t i;
     int64_t cmp;
-    std::list<LocksPtr> locks;
+    std::list<nvml::obj::shared_mutex *> locks;
     persistent_ptr<PmseTreeNode> lockNode;
     _ordering = ordering;
     // find node with key
     if (!_root)
         return false;
-    node = locateLeafWithKeyPM(_root, entry, _ordering, locks, lockNode, false);
+    node = locateLeafWithKeyPM(_root, entry, _ordering, locks, lockNode, false, txn);
 
     for (i = 0; i < node->num_keys; i++) {
         cmp = IndexKeyEntry_PM::compareEntries(entry, node->keys[i], _ordering);
@@ -96,14 +96,14 @@ bool PmseTree::remove(pool_base pop, IndexKeyEntry& entry,
         if (lockNode) {
                lockNode->_pmutex.unlock();
            }
-        unlockTree(locks);
+        unlockTree(locks,txn->getClient()->getConnectionId());
         return false;
     }
     _root = deleteEntry(pop, entry, node, i);
     if (lockNode) {
        lockNode->_pmutex.unlock();
     }
-    unlockTree(locks);
+    unlockTree(locks,txn->getClient()->getConnectionId());
     return true;
 }
 
@@ -499,12 +499,12 @@ bool PmseTree::nodeIsSafeForOperation(persistent_ptr<PmseTreeNode> node, bool in
 
 persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
                 persistent_ptr<PmseTreeNode> node, IndexKeyEntry& entry,
-                const BSONObj& ordering, std::list<LocksPtr>& locks,
-                persistent_ptr<PmseTreeNode>& lockNode, bool insert) {
-    uint64_t i = 0;
+                const BSONObj& ordering, std::list<nvml::obj::shared_mutex *>& locks,
+                persistent_ptr<PmseTreeNode>& lockNode, bool insert, OperationContext* txn) {
+    /*uint64_t i = 0;
     int64_t cmp;
-    persistent_ptr<PmseTreeNode> current = node;
-
+//    persistent_ptr<PmseTreeNode> current = node;
+    persistent_ptr<PmseTreeNode> current = _root;
     if(current->is_leaf){
         (current->_pmutex).lock();
         locks.push_back(LocksPtr(&(current->_pmutex)));
@@ -574,6 +574,50 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
         current->next->_pmutex.lock();
         lockNode = current->next;
     }
+    return current;*/
+
+    uint64_t i = 0;
+    int64_t cmp;
+    //persistent_ptr<PmseTreeNode> current;// = _root;
+    persistent_ptr<PmseTreeNode> current = _root;
+
+
+    std::cout <<txn->getClient()->getConnectionId() << " locking root: " <<current.raw_ptr()->off << std::endl;
+    (current->_pmutex).lock();
+    //LocksPtr lockPtr(&(_root->_pmutex));
+    locks.push_back(&(current->_pmutex));
+    std::cout <<txn->getClient()->getConnectionId() << " lock: " << &(current->_pmutex) << std::endl;
+    //locks.push_back(LocksPtr(&(_root->_pmutex)));
+    std::cout <<txn->getClient()->getConnectionId() << " locked root: " <<current.raw_ptr()->off << std::endl;
+    //current = _root;
+    if (current == nullptr)
+        return current;
+
+    while (!current->is_leaf) {
+        i = 0;
+        while (i < current->num_keys) {
+            cmp = IndexKeyEntry_PM::compareEntries(entry, current->keys[i], ordering);
+            if (cmp >= 0) {
+                i++;
+            } else {
+                break;
+            }
+        }
+        (current->children_array[i]->_pmutex).lock();
+        std::cout <<txn->getClient()->getConnectionId() << " locking children"<< &(current->children_array[i]->_pmutex) << std::endl;
+        current = current->children_array[i];
+        if (nodeIsSafeForOperation(current, insert)) {
+            std::cout <<txn->getClient()->getConnectionId() << " entering unlocking" << std::endl;
+            unlockTree(locks, txn->getClient()->getConnectionId());
+        }
+        //locks.push_back(LocksPtr(&(current->_pmutex)));
+        locks.push_back(&(current->_pmutex));
+    }
+    if (current->next) {
+        current->next->_pmutex.lock();
+        std::cout <<txn->getClient()->getConnectionId() << " locking next"<< &(current->next->_pmutex) << std::endl;
+        lockNode = current->next;
+    }
     return current;
 }
 
@@ -616,7 +660,8 @@ uint64_t PmseTree::cut(uint64_t length) {
  */
 persistent_ptr<PmseTreeNode> PmseTree::splitFullNodeAndInsert(
                 pool_base pop, persistent_ptr<PmseTreeNode> node,
-                IndexKeyEntry& entry, const BSONObj& _ordering) {
+                IndexKeyEntry& entry, const BSONObj& _ordering, OperationContext* txn,
+                std::list<nvml::obj::shared_mutex *>& locks) {
     persistent_ptr<PmseTreeNode> new_leaf;
     IndexKeyEntry_PM new_entry;
     uint64_t insertion_index = 0;
@@ -677,6 +722,13 @@ persistent_ptr<PmseTreeNode> PmseTree::splitFullNodeAndInsert(
     new_leaf->parent = node->parent;
     new_entry = new_leaf->keys[0];
     new_root = insertIntoNodeParent(pop, _root, node, new_entry, new_leaf);
+    std::cout <<txn->getClient()->getConnectionId() << " splitting, new root: " <<new_root.raw_ptr()->off << std::endl;
+    if(new_root.raw_ptr()->off!=_root.raw_ptr()->off)
+    {
+        std::cout <<txn->getClient()->getConnectionId() << " splitting, _root: " <<_root.raw_ptr()->off << std::endl;
+        new_root->_pmutex.lock();
+        locks.push_back(&(new_root->_pmutex));
+    }
     new_leaf->_pmutex.unlock();
     _last = new_leaf;
     return new_root;
@@ -700,6 +752,7 @@ persistent_ptr<PmseTreeNode> PmseTree::insertKeyIntoNode(
                 pool_base pop, persistent_ptr<PmseTreeNode> root,
                 persistent_ptr<PmseTreeNode> n, uint64_t left_index,
                 IndexKeyEntry_PM& new_key, persistent_ptr<PmseTreeNode> right) {
+    std::cout << " insertToNodeAfterSplit" << std::endl;
     uint64_t i;
     for (i = n->num_keys; i > left_index; i--) {
         n->children_array[i + 1] = n->children_array[i];
@@ -718,6 +771,7 @@ persistent_ptr<PmseTreeNode> PmseTree::insertToNodeAfterSplit(
                 pool_base pop, persistent_ptr<PmseTreeNode> root,
                 persistent_ptr<PmseTreeNode> old_node, uint64_t left_index,
                 IndexKeyEntry_PM& new_key, persistent_ptr<PmseTreeNode> right) {
+    std::cout << " insertToNodeAfterSplit" << std::endl;
     uint64_t i = 0, j, split;
     IndexKeyEntry_PM k_prime;
     persistent_ptr<PmseTreeNode> new_node;
@@ -817,6 +871,7 @@ persistent_ptr<PmseTreeNode> PmseTree::insertIntoNodeParent(
 persistent_ptr<PmseTreeNode> PmseTree::allocateNewRoot(
                 pool_base pop, persistent_ptr<PmseTreeNode> left,
                 IndexKeyEntry_PM& new_key, persistent_ptr<PmseTreeNode> right) {
+    std::cout << " allocateNewRoot" << std::endl;
     persistent_ptr<PmseTreeNode> new_root;
     new_root = make_persistent<PmseTreeNode>(false);
     (new_root->keys[0]).data = pmemobj_tx_alloc(new_key.getBSON().objsize(), 1);
@@ -832,40 +887,47 @@ persistent_ptr<PmseTreeNode> PmseTree::allocateNewRoot(
     return new_root;
 }
 
-void PmseTree::unlockTree(std::list<LocksPtr>& locks) {
-    std::list<LocksPtr>::const_iterator iterator;
+void PmseTree::unlockTree(std::list<nvml::obj::shared_mutex *>& locks, ConnectionId id) {
+    std::list<nvml::obj::shared_mutex *>::const_iterator iterator;
     try {
         for (iterator = locks.begin(); iterator != locks.end(); ++iterator) {
-            iterator->ptr->unlock();
+            std::cout <<id << " unlocking node, ptr: "<< *iterator << std::endl;
+            (*iterator)->unlock();
+            std::cout <<id << " unlocked node" << std::endl;
         }
         locks.erase(locks.begin(), locks.end());
     }catch(std::exception &e) {}
 }
 
 Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
-                        const BSONObj& ordering, bool dupsAllowed) {
+                        const BSONObj& ordering, bool dupsAllowed, OperationContext* txn) {
     persistent_ptr<PmseTreeNode> node;
     Status status = Status::OK();
     uint64_t i;
     int64_t cmp;
-    std::list<LocksPtr> locks;
+    std::list<nvml::obj::shared_mutex *> locks;
     persistent_ptr<PmseTreeNode> lockNode;
 
+
+
     if (!_root) {
-        // root not allocated yet
-        try {
-            transaction::exec_tx(pop, [this, &entry] {
-                _root = makeTreeRoot(entry);
-                _first = _root;
-                _last = _root;
-            });
-        } catch (std::exception &e) {
-            log() << "Index: " << e.what();
-            status = Status(ErrorCodes::CommandFailed, e.what());
+        stdx::lock_guard<nvml::obj::mutex> guard(globalMutex);
+        if(!_root){
+            // root not allocated yet
+            try {
+                transaction::exec_tx(pop, [this, &entry] {
+                    _root = makeTreeRoot(entry);
+                    _first = _root;
+                    _last = _root;
+                });
+            } catch (std::exception &e) {
+                log() << "Index: " << e.what();
+                status = Status(ErrorCodes::CommandFailed, e.what());
+            }
+            return status;
         }
-        return status;
     }
-    node = locateLeafWithKeyPM(_root, entry, ordering, locks, lockNode, true);
+    node = locateLeafWithKeyPM(_root, entry, ordering, locks, lockNode, true, txn);
     /*
      * Duplicate key check
      */
@@ -878,7 +940,7 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
                     StringBuilder sb;
                     sb << "Duplicate key error ";
                     sb << "dup key: " << entry.key.toString();
-                    unlockTree(locks);
+                    unlockTree(locks,txn->getClient()->getConnectionId());
                     return Status(ErrorCodes::DuplicateKey, sb.str());
                 } else {
                     break;
@@ -891,6 +953,7 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
      * There is place for new value
      */
     if (node->num_keys < (TREE_ORDER)) {
+
         try {
             transaction::exec_tx(pop, [this, &status, &node, &entry, ordering] {
                 status = insertKeyIntoLeaf(node, entry, ordering);
@@ -902,7 +965,7 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
             }
             return Status(ErrorCodes::CommandFailed, e.what());
         }
-        unlockTree(locks);
+        unlockTree(locks,txn->getClient()->getConnectionId());
         if (lockNode) {
            lockNode->_pmutex.unlock();
        }
@@ -912,9 +975,11 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
     /*
      * splitting
      */
+    stdx::lock_guard<nvml::obj::mutex> guard(globalMutex);
+    std::cout <<txn->getClient()->getConnectionId() << " splitting" << std::endl;
     try {
-        transaction::exec_tx(pop, [this, pop, &node, &entry, ordering] {
-            _root = splitFullNodeAndInsert(pop, node, entry, ordering);
+        transaction::exec_tx(pop, [this, pop, &node, &entry, ordering, txn, &locks] {
+            _root = splitFullNodeAndInsert(pop, node, entry, ordering, txn, locks);
         });
     } catch (std::exception &e) {
         log() << "Index: " << e.what();
@@ -926,7 +991,9 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
     if (lockNode) {
        lockNode->_pmutex.unlock();
     }
-    unlockTree(locks);
+    unlockTree(locks,txn->getClient()->getConnectionId());
+    //_root->_pmutex.unlock();
+    std::cout <<txn->getClient()->getConnectionId()<< " splitting done" << std::endl;
     return Status::OK();
 }
 

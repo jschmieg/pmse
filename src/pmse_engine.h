@@ -137,7 +137,8 @@ class PmseEngine : public KVEngine {
         return _identList->getKeys();
     }
 
-    virtual void cleanShutdown() {}
+    virtual void cleanShutdown() {
+    }
 
     void setJournalListener(JournalListener* jl) final {}
 

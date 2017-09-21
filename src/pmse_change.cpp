@@ -177,7 +177,7 @@ void RemoveIndexChange::commit() {}
 void RemoveIndexChange::rollback() {
     Status status = Status::OK();
     IndexKeyEntry entry(_key.getOwned(), _loc);
-    status = _tree->insert(_pop, entry, _ordering, _dupsAllowed);
+    status = _tree->insert(_pop, entry, _ordering, _dupsAllowed, nullptr);
     if (status == Status::OK()) {
         ++_tree->_records;
     }

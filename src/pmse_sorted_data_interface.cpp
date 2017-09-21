@@ -96,7 +96,7 @@ Status PmseSortedDataInterface::insert(OperationContext* txn,
     }
     try {
         IndexKeyEntry entry(key.getOwned(), loc);
-        status = _tree->insert(_pm_pool, entry, _desc->keyPattern(), dupsAllowed);
+        status = _tree->insert(_pm_pool, entry, _desc->keyPattern(), dupsAllowed, txn);
         if (status == Status::OK()) {
             ++_tree->_records;
             txn->recoveryUnit()->registerChange(new InsertIndexChange(_tree, _pm_pool, key, loc, dupsAllowed, _desc));

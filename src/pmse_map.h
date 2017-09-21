@@ -56,7 +56,7 @@
 namespace mongo {
 
 const uint64_t CAPPED_SIZE = 1;
-const uint64_t HASHMAP_SIZE = 1'000'000u;
+const uint64_t HASHMAP_SIZE = 1'000u;
 
 class PmseRecordCursor;
 
@@ -263,7 +263,7 @@ class PmseMap {
     p<uint64_t> _maxDocuments;
     p<uint64_t> _sizeOfCollection;
     persistent_ptr<persistent_ptr<PmseListIntPtr>[]> _list;
-
+    nvml::obj::mutex _pmutexGlobal;
     nvml::obj::mutex _pmutex;
     persistent_ptr<KVPair> _deleted;
 
@@ -274,6 +274,7 @@ class PmseMap {
     }
 
     persistent_ptr<KVPair> getNextId() {
+        stdx::lock_guard<nvml::obj::mutex> guard(_pmutexGlobal);
             persistent_ptr<KVPair> temp = nullptr;
             if (_deleted == nullptr) {
                 if (_counter != std::numeric_limits<uint64_t>::max()-1) {
