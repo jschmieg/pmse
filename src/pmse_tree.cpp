@@ -582,13 +582,13 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
     persistent_ptr<PmseTreeNode> current = _root;
 
 
-    //std::cout <<txn->getClient()->getConnectionId() << " locking root: " <<current.raw_ptr()->off << std::endl;
+    std::cout <<txn->getClient()->getConnectionId() << " locking root: " <<current.raw_ptr()->off << std::endl;
     (current->_pmutex).lock();
     //LocksPtr lockPtr(&(_root->_pmutex));
     locks.push_back(&(current->_pmutex));
-    //std::cout <<txn->getClient()->getConnectionId() << " lock: " << &(current->_pmutex) << std::endl;
+    std::cout <<txn->getClient()->getConnectionId() << " lock: " << &(current->_pmutex) << std::endl;
     //locks.push_back(LocksPtr(&(_root->_pmutex)));
-    //std::cout <<txn->getClient()->getConnectionId() << " locked root: " <<current.raw_ptr()->off << std::endl;
+    std::cout <<txn->getClient()->getConnectionId() << " locked root: " <<current.raw_ptr()->off << std::endl;
     //current = _root;
     if (current == nullptr)
         return current;
@@ -604,10 +604,10 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
             }
         }
         (current->children_array[i]->_pmutex).lock();
-        //std::cout <<txn->getClient()->getConnectionId() << " locking children"<< &(current->children_array[i]->_pmutex) << std::endl;
+        std::cout <<txn->getClient()->getConnectionId() << " locking children"<< &(current->children_array[i]->_pmutex) << std::endl;
         current = current->children_array[i];
         if (nodeIsSafeForOperation(current, insert)) {
-            //std::cout <<txn->getClient()->getConnectionId() << " entering unlocking" << std::endl;
+            std::cout <<txn->getClient()->getConnectionId() << " entering unlocking" << std::endl;
             unlockTree(locks, txn->getClient()->getConnectionId());
         }
         //locks.push_back(LocksPtr(&(current->_pmutex)));
@@ -615,7 +615,7 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
     }
     if (current->next) {
         current->next->_pmutex.lock();
-        //std::cout <<txn->getClient()->getConnectionId() << " locking next"<< &(current->next->_pmutex) << std::endl;
+        std::cout <<txn->getClient()->getConnectionId() << " locking next"<< &(current->next->_pmutex) << std::endl;
         lockNode = current->next;
     }
     return current;
@@ -722,10 +722,10 @@ persistent_ptr<PmseTreeNode> PmseTree::splitFullNodeAndInsert(
     new_leaf->parent = node->parent;
     new_entry = new_leaf->keys[0];
     new_root = insertIntoNodeParent(pop, _root, node, new_entry, new_leaf);
-    //std::cout <<txn->getClient()->getConnectionId() << " splitting, new root: " <<new_root.raw_ptr()->off << std::endl;
+    std::cout <<txn->getClient()->getConnectionId() << " splitting, new root: " <<new_root.raw_ptr()->off << std::endl;
     if(new_root.raw_ptr()->off!=_root.raw_ptr()->off)
     {
-        //std::cout <<txn->getClient()->getConnectionId() << " splitting, _root: " <<_root.raw_ptr()->off << std::endl;
+        std::cout <<txn->getClient()->getConnectionId() << " splitting, _root: " <<_root.raw_ptr()->off << std::endl;
         new_root->_pmutex.lock();
         locks.push_back(&(new_root->_pmutex));
     }
@@ -752,7 +752,7 @@ persistent_ptr<PmseTreeNode> PmseTree::insertKeyIntoNode(
                 pool_base pop, persistent_ptr<PmseTreeNode> root,
                 persistent_ptr<PmseTreeNode> n, uint64_t left_index,
                 IndexKeyEntry_PM& new_key, persistent_ptr<PmseTreeNode> right) {
-    //std::cout << " insertToNodeAfterSplit" << std::endl;
+    std::cout << " insertToNodeAfterSplit" << std::endl;
     uint64_t i;
     for (i = n->num_keys; i > left_index; i--) {
         n->children_array[i + 1] = n->children_array[i];
@@ -771,7 +771,7 @@ persistent_ptr<PmseTreeNode> PmseTree::insertToNodeAfterSplit(
                 pool_base pop, persistent_ptr<PmseTreeNode> root,
                 persistent_ptr<PmseTreeNode> old_node, uint64_t left_index,
                 IndexKeyEntry_PM& new_key, persistent_ptr<PmseTreeNode> right) {
-    //std::cout << " insertToNodeAfterSplit" << std::endl;
+    std::cout << " insertToNodeAfterSplit" << std::endl;
     uint64_t i = 0, j, split;
     IndexKeyEntry_PM k_prime;
     persistent_ptr<PmseTreeNode> new_node;
@@ -871,7 +871,7 @@ persistent_ptr<PmseTreeNode> PmseTree::insertIntoNodeParent(
 persistent_ptr<PmseTreeNode> PmseTree::allocateNewRoot(
                 pool_base pop, persistent_ptr<PmseTreeNode> left,
                 IndexKeyEntry_PM& new_key, persistent_ptr<PmseTreeNode> right) {
-    //std::cout << " allocateNewRoot" << std::endl;
+    std::cout << " allocateNewRoot" << std::endl;
     persistent_ptr<PmseTreeNode> new_root;
     new_root = make_persistent<PmseTreeNode>(false);
     (new_root->keys[0]).data = pmemobj_tx_alloc(new_key.getBSON().objsize(), 1);
@@ -891,9 +891,9 @@ void PmseTree::unlockTree(std::list<nvml::obj::shared_mutex *>& locks, Connectio
     std::list<nvml::obj::shared_mutex *>::const_iterator iterator;
     try {
         for (iterator = locks.begin(); iterator != locks.end(); ++iterator) {
-            //std::cout <<id << " unlocking node, ptr: "<< *iterator << std::endl;
+            std::cout <<id << " unlocking node, ptr: "<< *iterator << std::endl;
             (*iterator)->unlock();
-            //std::cout <<id << " unlocked node" << std::endl;
+            std::cout <<id << " unlocked node" << std::endl;
         }
         locks.erase(locks.begin(), locks.end());
     }catch(std::exception &e) {}
@@ -976,7 +976,7 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
      * splitting
      */
     //stdx::lock_guard<nvml::obj::mutex> guard(globalMutex);
-    //std::cout <<txn->getClient()->getConnectionId() << " splitting" << std::endl;
+    std::cout <<txn->getClient()->getConnectionId() << " splitting" << std::endl;
     try {
         transaction::exec_tx(pop, [this, pop, &node, &entry, ordering, txn, &locks] {
             _root = splitFullNodeAndInsert(pop, node, entry, ordering, txn, locks);
@@ -993,7 +993,7 @@ Status PmseTree::insert(pool_base pop, IndexKeyEntry& entry,
     }
     unlockTree(locks,txn->getClient()->getConnectionId());
     //_root->_pmutex.unlock();
-    //std::cout <<txn->getClient()->getConnectionId()<< " splitting done" << std::endl;
+    std::cout <<txn->getClient()->getConnectionId()<< " splitting done" << std::endl;
     return Status::OK();
 }
 
