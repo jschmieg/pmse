@@ -584,31 +584,44 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
     //persistent_ptr<PmseTreeNode> current;// = _root;
     persistent_ptr<PmseTreeNode> current = _root;
 
+    if (current == nullptr)
+            return current;
 
-    std::cout <<txn->getClient()->getConnectionId() << " locking root: " <<current.raw_ptr()->off << std::endl;
-    (current->_pmutex).lock();
-    std::cout <<txn->getClient()->getConnectionId() << " 1locked current: " <<current.raw_ptr()->off << " 1locked root: " <<_root.raw_ptr()->off << std::endl;
+    if(current->is_leaf){
+        std::cout <<txn->getClient()->getConnectionId() << " locking root1 : " <<current.raw_ptr()->off << std::endl;
+        (current->_pmutex).lock();
+        std::cout <<txn->getClient()->getConnectionId() << " locked current1: " <<current.raw_ptr()->off << " locked root1: " <<_root.raw_ptr()->off << std::endl;
+        if(current.raw_ptr()->off != _root.raw_ptr()->off)
+        {
+            std::cout <<txn->getClient()->getConnectionId() << " <----root changed1 " << std::endl;
+            //unlock current
+            (current->_pmutex).unlock();
+            current = _root;
+            /*(_root->_pmutex).lock();
+            std::cout <<txn->getClient()->getConnectionId() << " x-locked root1: " << &(_root->_pmutex) << std::endl;
+            locks.push_back(&(_root->_pmutex));
+            std::cout <<txn->getClient()->getConnectionId() << " pushed x-lock root1: " << &(_root->_pmutex) << std::endl;
+            return _root;*/
+        }
+        else{
+            std::cout <<txn->getClient()->getConnectionId() << " <----root not changed1 " << std::endl;
+            locks.push_back(&(_root->_pmutex));
+            std::cout <<txn->getClient()->getConnectionId() << " pushed x-lock root1: " << &(_root->_pmutex) << std::endl;
+            return _root;
+        }
+    }
+    (current->_pmutex).lock_shared();
+    std::cout <<txn->getClient()->getConnectionId() << " locked current1a: " <<current.raw_ptr()->off << " root1a: " <<_root.raw_ptr()->off << std::endl;
     if(current.raw_ptr()->off != _root.raw_ptr()->off)
     {
-        std::cout <<txn->getClient()->getConnectionId() << " <----root changed" << std::endl;
+        std::cout <<txn->getClient()->getConnectionId() << " <----root changed1--------->>>>> " << std::endl;
         //unlock current
         (current->_pmutex).unlock();
         (_root->_pmutex).lock();
+        std::cout <<txn->getClient()->getConnectionId() << " w-locked root1: " << &(_root->_pmutex) << std::endl;
+        current = _root;
 
     }
-    //LocksPtr lockPtr(&(_root->_pmutex));
-    locks.push_back(&(_root->_pmutex));
-    std::cout <<txn->getClient()->getConnectionId() << " lock: " << &(_root->_pmutex) << std::endl;
-    //locks.push_back(LocksPtr(&(_root->_pmutex)));
-    std::cout <<txn->getClient()->getConnectionId() << " 2locked root: " <<_root.raw_ptr()->off << std::endl;
-    for(uint64_t i =0; i < _root->num_keys;i++)
-    {
-        std::cout <<txn->getClient()->getConnectionId() << " root["<<i<<"]= "<<_root->keys[i].getBSON().toString() << std::endl;
-    }
-    current = _root;
-    if (current == nullptr)
-        return current;
-
     while (!current->is_leaf) {
         i = 0;
         while (i < current->num_keys) {
@@ -619,23 +632,104 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
                 break;
             }
         }
+        std::cout <<txn->getClient()->getConnectionId() << " Found key1 "<<i<<" in node " << std::endl;
+        std::cout <<txn->getClient()->getConnectionId() << " current1b: " <<current.raw_ptr()->off << std::endl;
+        for(uint64_t j =0; j < current->num_keys;j++)
+        {
+            std::cout <<txn->getClient()->getConnectionId() << " current2["<<j<<"]= "<<current->keys[j].getBSON().toString() << std::endl;
+        }
+        if(current->is_leaf)
+        {
+            std::cout <<txn->getClient()->getConnectionId() << " current is leaf " << std::endl;
+        }
+        else
+        {
+            std::cout <<txn->getClient()->getConnectionId() << " current is not leaf " << std::endl;
+        }
+        std::cout <<txn->getClient()->getConnectionId() << " start check children: "<<current->children_array[i]->num_keys << std::endl;
 
-        std::cout <<txn->getClient()->getConnectionId() << " Found key"<<i<<" in node, childrens: " << std::endl;
         for(uint64_t j =0; j < current->children_array[i]->num_keys;j++)
         {
-            std::cout << txn->getClient()->getConnectionId() << " "<<j<<"="<< current->children_array[i]->keys[j].getBSON().toString() << std::endl;
+            std::cout <<txn->getClient()->getConnectionId() << " current->children_array["<<i<<"].keys["<<j<<"= "<<current->children_array[i]->keys[j].getBSON().toString() << std::endl;
         }
 
-        std::cout <<txn->getClient()->getConnectionId() << " locking children"<< &(current->children_array[i]->_pmutex) << std::endl;
-        (current->children_array[i]->_pmutex).lock();
+        if(current->children_array[i]->is_leaf){
+            std::cout <<txn->getClient()->getConnectionId() << " current2 children is leaf " << std::endl;
+        }
+        else
+        {
+            std::cout <<txn->getClient()->getConnectionId() << " current2 children is not leaf " << std::endl;
+        }
+        std::cout <<txn->getClient()->getConnectionId() << " continue current->children_array[i]="<<current->children_array[i].raw_ptr()->off << std::endl;
+        if(current->children_array[i]->is_leaf){
+            (current->children_array[i]->_pmutex).lock();
+            locks.push_back(&(current->children_array[i]->_pmutex));
+        }
+        else{
+            (current->children_array[i]->_pmutex).lock_shared();
+        }
+        std::cout <<txn->getClient()->getConnectionId() << " current->_pmutex.unlock_shared()="<<current.raw_ptr()->off << std::endl;
 
         current = current->children_array[i];
-        if (nodeIsSafeForOperation(current, insert)) {
-            std::cout <<txn->getClient()->getConnectionId() << " entering unlocking" << std::endl;
-            unlockTree(locks, txn->getClient()->getConnectionId());
+        current->parent->_pmutex.unlock_shared();
+        std::cout <<txn->getClient()->getConnectionId() << " next loop, current"<<current.raw_ptr()->off << std::endl;
+    }
+    if (!nodeIsSafeForOperation(current, insert)){
+        unlockTree(locks, txn->getClient()->getConnectionId() );
+        current = _root;
+        std::cout <<txn->getClient()->getConnectionId() << " locking root2: " <<current.raw_ptr()->off << std::endl;
+        (current->_pmutex).lock();
+        std::cout <<txn->getClient()->getConnectionId() << " locked current2: " <<current.raw_ptr()->off << " locked root2: " <<_root.raw_ptr()->off << std::endl;
+        if(current.raw_ptr()->off != _root.raw_ptr()->off)
+        {
+            std::cout <<txn->getClient()->getConnectionId() << " <----root changed2" << std::endl;
+            //unlock current
+            (current->_pmutex).unlock();
+            (_root->_pmutex).lock();
+
         }
-        //locks.push_back(LocksPtr(&(current->_pmutex)));
-        locks.push_back(&(current->_pmutex));
+        locks.push_back(&(_root->_pmutex));
+        std::cout <<txn->getClient()->getConnectionId() << " lock2: " << &(_root->_pmutex) << std::endl;
+        //locks.push_back(LocksPtr(&(_root->_pmutex)));
+        std::cout <<txn->getClient()->getConnectionId() << " locked root2: " <<_root.raw_ptr()->off << std::endl;
+        for(uint64_t i =0; i < _root->num_keys;i++)
+        {
+            std::cout <<txn->getClient()->getConnectionId() << " root2["<<i<<"]= "<<_root->keys[i].getBSON().toString() << std::endl;
+        }
+        current = _root;
+        if (current == nullptr)
+            return current;
+
+        while (!current->is_leaf) {
+            std::cout <<txn->getClient()->getConnectionId() << " entering while (!current->is_leaf) with current = "<< current.raw_ptr()->off << std::endl;
+            i = 0;
+            while (i < current->num_keys) {
+                cmp = IndexKeyEntry_PM::compareEntries(entry, current->keys[i], ordering);
+                if (cmp >= 0) {
+                    i++;
+                } else {
+                    break;
+                }
+            }
+
+            std::cout <<txn->getClient()->getConnectionId() << " Found key2"<<i<<" in node, childrens: " << std::endl;
+            for(uint64_t j =0; j < current->children_array[i]->num_keys;j++)
+            {
+                std::cout << txn->getClient()->getConnectionId() << " "<<j<<"="<< current->children_array[i]->keys[j].getBSON().toString() << std::endl;
+            }
+
+            std::cout <<txn->getClient()->getConnectionId() << " locking children2"<< &(current->children_array[i]->_pmutex) << std::endl;
+            (current->children_array[i]->_pmutex).lock();
+
+            current = current->children_array[i];
+            std::cout <<txn->getClient()->getConnectionId() << " updated current = "<< current.raw_ptr()->off << std::endl;
+            if (nodeIsSafeForOperation(current, insert)) {
+                std::cout <<txn->getClient()->getConnectionId() << " entering unlocking2" << std::endl;
+                unlockTree(locks, txn->getClient()->getConnectionId());
+            }
+            //locks.push_back(LocksPtr(&(current->_pmutex)));
+            locks.push_back(&(current->_pmutex));
+        }
     }
     if (current->next) {
         current->next->_pmutex.lock();
@@ -776,7 +870,7 @@ persistent_ptr<PmseTreeNode> PmseTree::insertKeyIntoNode(
                 pool_base pop, persistent_ptr<PmseTreeNode> root,
                 persistent_ptr<PmseTreeNode> n, uint64_t left_index,
                 IndexKeyEntry_PM& new_key, persistent_ptr<PmseTreeNode> right) {
-    std::cout << " insertToNodeAfterSplit" << std::endl;
+    std::cout << " insertKeyIntoNode" << std::endl;
     uint64_t i;
     for (i = n->num_keys; i > left_index; i--) {
         n->children_array[i + 1] = n->children_array[i];
