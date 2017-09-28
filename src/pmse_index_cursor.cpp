@@ -68,8 +68,10 @@ PmseCursor::PmseCursor(OperationContext* txn, bool isForward,
 bool PmseCursor::lower_bound(IndexKeyEntry entry, CursorObject& cursor, std::list<nvml::obj::shared_mutex *>& locks) {
     uint64_t i = 0;
     int64_t cmp;
-    (_tree->_root->_pmutex).lock_shared();
+    //(_tree->_root->_pmutex).lock_shared();
     persistent_ptr<PmseTreeNode> current = _tree->_root;
+    (current->_pmutex).lock_shared();
+    persistent_ptr<PmseTreeNode> child;
     while (!current->is_leaf) {
         i = 0;
         while (i < current->num_keys) {
@@ -81,9 +83,13 @@ bool PmseCursor::lower_bound(IndexKeyEntry entry, CursorObject& cursor, std::lis
                 break;
             }
         }
-        (current->children_array[i]->_pmutex).lock_shared();
+        child = current->children_array[i];
+        child->_pmutex.lock_shared();
+        current->_pmutex.unlock_shared();
+        current = child;
+        /*(current->children_array[i]->_pmutex).lock_shared();
         current = current->children_array[i];
-        current->parent->_pmutex.unlock_shared();
+        current->parent->_pmutex.unlock_shared();*/
     }
     locks.push_back(&(current->_pmutex));
     i = 0;

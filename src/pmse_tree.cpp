@@ -686,6 +686,7 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
             //unlock current
             (current->_pmutex).unlock();
             (_root->_pmutex).lock();
+            current = _root;
 
         }
         locks.push_back(&(_root->_pmutex));
@@ -696,15 +697,17 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
         {
             std::cout <<txn->getClient()->getConnectionId() << " root2["<<i<<"]= "<<_root->keys[i].getBSON().toString() << std::endl;
         }
-        current = _root;
+        /*current = _root;
         if (current == nullptr)
             return current;
-
+*/
         while (!current->is_leaf) {
             std::cout <<txn->getClient()->getConnectionId() << " entering while (!current->is_leaf) with current = "<< current.raw_ptr()->off << std::endl;
             i = 0;
             while (i < current->num_keys) {
+                std::cout << txn->getClient()->getConnectionId() << " checking keys:"<<i<<"="<< current->keys[i].getBSON().toString() << std::endl;
                 cmp = IndexKeyEntry_PM::compareEntries(entry, current->keys[i], ordering);
+                std::cout << txn->getClient()->getConnectionId() << " cmp="<<cmp << std::endl;
                 if (cmp >= 0) {
                     i++;
                 } else {
@@ -729,6 +732,7 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
             }
             //locks.push_back(LocksPtr(&(current->_pmutex)));
             locks.push_back(&(current->_pmutex));
+            std::cout <<txn->getClient()->getConnectionId() << " next loop2, current"<<current.raw_ptr()->off << std::endl;
         }
     }
     if (current->next) {
