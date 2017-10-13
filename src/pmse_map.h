@@ -57,7 +57,7 @@
 namespace mongo {
 
 const uint64_t CAPPED_SIZE = 1;
-const uint64_t HASHMAP_SIZE = 1'000'000u;
+const uint64_t HASHMAP_SIZE = 1'000u;
 
 class PmseRecordCursor;
 

@@ -79,6 +79,7 @@ bool PmseTree::remove(pool_base pop, IndexKeyEntry& entry,
     int64_t cmp;
     std::list<nvml::obj::shared_mutex*> locks;
     persistent_ptr<PmseTreeNode> lockNode;
+    std::cout << "remove: key:"<<entry.key.toString() << " loc="<<entry.loc <<std::endl;
     _ordering = ordering;
     // find node with key
     if (!_root)
@@ -93,6 +94,15 @@ bool PmseTree::remove(pool_base pop, IndexKeyEntry& entry,
     }
     // not found
     if (i == node->num_keys) {
+        std::cout << "-------------------------- remove: not found" <<std::endl;
+        std::cout << "printing next="<< node->next.raw_ptr()->off <<std::endl;
+        uint64_t k;
+        for(k=0;k<node->next->num_keys;k++)
+        {
+            std::cout << "next["<<k<<"]="<< node->next->keys[k].getBSON().toString() << " loc="<<node->next->keys[k].loc<< std::endl;
+
+        }
+
         if (lockNode) {
                lockNode->_pmutex.unlock();
            }
@@ -100,6 +110,7 @@ bool PmseTree::remove(pool_base pop, IndexKeyEntry& entry,
         return false;
     }
     _root = deleteEntry(pop, entry, node, i);
+    std::cout << "remove: key:"<<entry.key.toString() << " loc="<<entry.loc << " done"<<std::endl;
     if (lockNode) {
        lockNode->_pmutex.unlock();
     }
@@ -178,13 +189,16 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
                 persistent_ptr<PmseTreeNode> n,
                 persistent_ptr<PmseTreeNode> neighbor, int64_t neighbor_index,
                 int64_t k_prime_index, IndexKeyEntry_PM k_prime) {
-    uint64_t i;
+    uint64_t i,k;
     persistent_ptr<PmseTreeNode> tmp;
+    std::cout << "redistributeNodes n="<<n.raw_ptr()->off<<" neighbor =" <<neighbor.raw_ptr()->off <<std::endl;
     /* Case: n has a neighbor to the left.
      * Pull the neighbor's last key-pointer pair over
      * from the neighbor's right end to n's left end.
      */
     if (neighbor_index != -1) {
+        std::cout << "redistributeNodes neighbor_index != -1" <<std::endl;
+
         if (!n->is_leaf) {
             n->children_array[n->num_keys + 1] = n->children_array[n->num_keys];
             for (i = n->num_keys; i > 0; i--) {
@@ -192,6 +206,21 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
                 n->children_array[i] = n->children_array[i - 1];
             }
         } else {
+            std::cout << "printing n keys ("<<n->num_keys<<") before redistributeNodes, n="<<n.raw_ptr()->off  << std::endl;
+            for(k=0;k<n->num_keys;k++)
+            {
+                std::cout << "n["<<k<<"]="<< n->keys[k].getBSON().toString() << " loc="<<n->keys[k].loc<< std::endl;
+            }
+            std::cout << "printing neighbor keys ("<<n->num_keys<<") before redistributeNodes, neighbor="<<n.raw_ptr()->off  << std::endl;
+            for(k=0;k<neighbor->num_keys;k++)
+            {
+                std::cout << "neighbor["<<k<<"]="<< neighbor->keys[k].getBSON().toString() << " loc="<<neighbor->keys[k].loc<< std::endl;
+            }
+            std::cout << "printing n->parent keys ("<<n->parent->num_keys<<") before redistributeNodes, n="<<n->parent.raw_ptr()->off  << std::endl;
+            for(k=0;k<n->parent->num_keys;k++)
+            {
+                std::cout << "n->parent["<<k<<"]="<< n->parent->keys[k].getBSON().toString() << " loc="<<n->parent->keys[k].loc<< std::endl;
+            }
             for (i = n->num_keys; i > 0; i--) {
                 n->keys[i] = n->keys[i - 1];
             }
@@ -205,7 +234,11 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
             n->parent->keys[k_prime_index].data =
                             neighbor->keys[neighbor->num_keys - 1].data;
             n->parent->keys[k_prime_index].loc = neighbor->keys[neighbor->num_keys - 1].loc;
+
+
+
         } else {
+
             n->keys[0] = neighbor->keys[neighbor->num_keys - 1];
 
             IndexKeyEntry_PM entryPM;
@@ -216,14 +249,36 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
                        n->keys[0].getBSON().objsize());
 
             entryPM = (n->parent->keys[k_prime_index]);
+
+            std::cout << "printing entryPM.loc1 "<< entryPM.loc << std::endl;
             if (entryPM.data.raw().off != 0) {
                 pmemobj_tx_free(entryPM.data.raw());
             }
             entryPM.data = obj;
+            /**/entryPM.loc = n->keys[0].loc;
             n->parent->keys[k_prime_index].data = entryPM.data;
             n->parent->keys[k_prime_index].loc = entryPM.loc;
+
+            std::cout << "printing entryPM.loc2 "<< entryPM.loc << std::endl;
+            std::cout << "printing n keys ("<<n->num_keys<<") after redistributeNodes, n="<<n.raw_ptr()->off  << std::endl;
+            for(k=0;k<n->num_keys;k++)
+            {
+                std::cout << "n["<<k<<"]="<< n->keys[k].getBSON().toString() << " loc="<<n->keys[k].loc<< std::endl;
+            }
+            std::cout << "printing neighbor keys ("<<neighbor->num_keys<<") after redistributeNodes, neighbor="<<neighbor.raw_ptr()->off  << std::endl;
+            for(k=0;k<neighbor->num_keys;k++)
+            {
+                std::cout << "neighbor["<<k<<"]="<< neighbor->keys[k].getBSON().toString() << " loc="<<neighbor->keys[k].loc << std::endl;
+            }
+            std::cout << "printing n->parent keys ("<<n->parent->num_keys<<") before redistributeNodes, n="<<n->parent.raw_ptr()->off  << std::endl;
+           for(k=0;k<n->parent->num_keys;k++)
+           {
+               std::cout << "n->parent["<<k<<"]="<< n->parent->keys[k].getBSON().toString() << " loc="<<n->parent->keys[k].loc << std::endl;
+           }
+
         }
     } else {
+        std::cout << "redistributeNodes neighbor_index == -1" <<std::endl;
         /*
          * Case: n is the leftmost child.
          * Take a key-pointer pair from the neighbor to the right.
@@ -245,6 +300,7 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
             }
 
             entryPM.data = obj;
+            /**/entryPM.loc = neighbor->keys[1].loc;
 
             n->parent->keys[k_prime_index].data = entryPM.data;
             n->parent->keys[k_prime_index].loc = entryPM.loc;
@@ -254,8 +310,8 @@ persistent_ptr<PmseTreeNode> PmseTree::redistributeNodes(
             tmp = n->children_array[n->num_keys + 1];
             tmp->parent = n;
 
-            IndexKeyEntry_PM entryPM;
-            entryPM = (n->parent->keys[k_prime_index]);
+            /*IndexKeyEntry_PM entryPM;
+            entryPM = (n->parent->keys[k_prime_index]);*/
 
             n->parent->keys[k_prime_index].data = neighbor->keys[0].data;
             n->parent->keys[k_prime_index].loc = neighbor->keys[0].loc;
@@ -296,6 +352,8 @@ persistent_ptr<PmseTreeNode> PmseTree::coalesceNodes(
                 IndexKeyEntry_PM k_prime) {
     uint64_t i, j, neighbor_insertion_index, n_end;
     persistent_ptr<PmseTreeNode> tmp;
+
+    std::cout << "coalesceNodes n="<<n.raw_ptr()->off<<" neighbor =" <<neighbor.raw_ptr()->off <<std::endl;
     IndexKeyEntry k_prime_temp(k_prime.getBSON(), RecordId((k_prime).loc));
     // Swap neighbor with node if node is on the extreme left and neighbor is to its right.
     if (neighbor_index == -1) {
@@ -504,7 +562,7 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
     int64_t cmp;
     persistent_ptr<PmseTreeNode> current = _root;
     persistent_ptr<PmseTreeNode> child;
-
+    std::cout << "locateLeafWithKeyPM, key=" << entry.key.toString() <<" loc="<<entry.loc  << std::endl;
     if (current == nullptr)
             return nullptr;
 
@@ -525,6 +583,23 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
         current = _root;
     }
     while (!current->is_leaf) {
+        uint64_t k;
+        std::cout << "printing current keys ("<<current->num_keys<<") , current="<<current.raw_ptr()->off  << std::endl;
+        for(k=0;k<current->num_keys;k++)
+        {
+            std::cout << "current["<<k<<"]="<< current->keys[k].getBSON().toString() << " loc="<<current->keys[k].loc;
+            if(!current->is_leaf)
+            {
+                std::cout << " children="<< current->children_array[k].raw_ptr()->off <<std::endl;
+            }
+            else{
+                std::cout << std::endl;
+            }
+        }
+        if(!current->is_leaf)
+        {
+            std::cout << " children="<< current->children_array[k].raw_ptr()->off <<std::endl;
+        }
         i = 0;
         while (i < current->num_keys) {
             cmp = IndexKeyEntry_PM::compareEntries(entry, current->keys[i], ordering);
@@ -545,6 +620,26 @@ persistent_ptr<PmseTreeNode> PmseTree::locateLeafWithKeyPM(
     current = current->children_array[i];
     current->parent->_pmutex.unlock_shared();
     }
+
+    uint64_t k;
+    std::cout << "printing current keys ("<<current->num_keys<<") , current="<<current.raw_ptr()->off  << std::endl;
+    for(k=0;k<current->num_keys;k++)
+    {
+        std::cout << "current["<<k<<"]="<< current->keys[k].getBSON().toString() << " loc="<<current->keys[k].loc;
+        if(!current->is_leaf)
+        {
+            std::cout << " children="<< current->children_array[k].raw_ptr()->off <<std::endl;
+        }
+        else{
+            std::cout << std::endl;
+        }
+    }
+    if(!current->is_leaf)
+    {
+        std::cout << " children="<< current->children_array[k].raw_ptr()->off <<std::endl;
+    }
+    i = 0;
+    std::cout << "locateLeafWithKeyPM, key=" << entry.key.toString() <<" loc="<<entry.loc  << "done" << std::endl;
     if (!nodeIsSafeForOperation(current, insert)) {
         unlockTree(locks);
         current = _root;

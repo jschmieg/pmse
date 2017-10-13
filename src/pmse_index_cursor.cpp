@@ -58,7 +58,9 @@ PmseCursor::PmseCursor(OperationContext* txn, bool isForward,
       _tree(tree),
       _endPositionIsDataEnd(false),
       _locateFoundDataEnd(false),
-      _eofRestore(false) {}
+      _eofRestore(false) {
+    std::cout << this<<" ----->>>>create" << std::endl;
+}
 
     // Find entry in tree which is equal or bigger to input entry
     // Locates input cursor on that entry
@@ -66,11 +68,29 @@ PmseCursor::PmseCursor(OperationContext* txn, bool isForward,
 bool PmseCursor::lower_bound(IndexKeyEntry entry, CursorObject& cursor, std::list<nvml::obj::shared_mutex*>& locks) {
     uint64_t i = 0;
     int64_t cmp;
+    uint64_t k;
     persistent_ptr<PmseTreeNode> current = _tree->_root;
     (current->_pmutex).lock_shared();
     persistent_ptr<PmseTreeNode> child;
     while (!current->is_leaf) {
         i = 0;
+
+        std::cout << "printing current keys ("<<current->num_keys<<") , current="<<current.raw_ptr()->off  << std::endl;
+        for(k=0;k<current->num_keys;k++)
+        {
+            std::cout << "current["<<k<<"]="<< current->keys[k].getBSON().toString() << " loc="<<current->keys[k].loc;
+            if(!current->is_leaf)
+            {
+                std::cout << " children="<< current->children_array[k].raw_ptr()->off <<std::endl;
+            }
+            else{
+                std::cout << std::endl;
+            }
+        }
+        if(!current->is_leaf)
+        {
+            std::cout << " children="<< current->children_array[k].raw_ptr()->off <<std::endl;
+        }
         while (i < current->num_keys) {
             IndexEntryComparison c(Ordering::make(_ordering));
             cmp = c.compare(entry, IndexKeyEntry(current->keys[i].getBSON(), RecordId(current->keys[i].loc)));
@@ -80,11 +100,21 @@ bool PmseCursor::lower_bound(IndexKeyEntry entry, CursorObject& cursor, std::lis
                 break;
             }
         }
+        std::cout << " i="<< i <<std::endl;
         child = current->children_array[i];
         child->_pmutex.lock_shared();
         current->_pmutex.unlock_shared();
         current = child;
     }
+
+    std::cout << "current="<< current.raw_ptr()->off <<std::endl;
+    for(k=0;k<current->num_keys;k++)
+    {
+        std::cout << "current["<<k<<"]="<< current->keys[k].getBSON().toString() << " loc="<<current->keys[k].loc<< std::endl;
+
+    }
+
+
     locks.push_back(&(current->_pmutex));
     i = 0;
     IndexEntryComparison c(Ordering::make(_ordering));
@@ -95,6 +125,7 @@ bool PmseCursor::lower_bound(IndexKeyEntry entry, CursorObject& cursor, std::lis
     // Iterated to end of node without finding bigger value
     // It means: return next
     if (i == current->num_keys) {
+        std::cout << "-------------------------- lower_bound: not found: key"<<entry.key.toString() <<std::endl;
         if (current->next) {
             cursor.node = current->next;
             cursor.index = 0;
@@ -139,6 +170,7 @@ void PmseCursor::locate(const BSONObj& key, const RecordId& loc, std::list<nvml:
     bool locateFound;
     CursorObject locateCursor;
     _isEOF = false;
+    std::cout << this<<" locate start: "<<key.toString() << " loc=" <<loc.repr() <<std::endl;
     const auto query = IndexKeyEntry(key, loc);
     locateFound = lower_bound(query, locateCursor, locks);
     if (_forward) {
@@ -233,6 +265,7 @@ void PmseCursor::seekEndCursor() {
 
 
 void PmseCursor::setEndPosition(const BSONObj& key, bool inclusive) {
+    std::cout << "set end pos start: "<<key.toString() <<std::endl;
     if (key.isEmpty()) {
         // This means scan to end of index.
         _endState = boost::none;
@@ -242,6 +275,7 @@ void PmseCursor::setEndPosition(const BSONObj& key, bool inclusive) {
     _endState = EndState(stripFieldNames(key),
                          _forward == inclusive ? RecordId::max() : RecordId::min());
     seekEndCursor();
+    std::cout << "set end pos end: "<<key.toString() <<std::endl;
 }
 
 bool PmseCursor::atEndPoint() {
@@ -254,7 +288,7 @@ bool PmseCursor::atEndPoint() {
 boost::optional<IndexKeyEntry> PmseCursor::next(
                 RequestedInfo parts = kKeyAndLoc) {
     std::list<nvml::obj::shared_mutex *> locks;
-
+    std::cout << "next "<<std::endl;
     if (_tree->_root == nullptr)
         return {};
     if (_wasRestore) {
@@ -341,6 +375,7 @@ void PmseCursor::unlockTree(std::list<nvml::obj::shared_mutex*>& locks) {
 boost::optional<IndexKeyEntry> PmseCursor::seek(const BSONObj& key,
                                                 bool inclusive,
                                                 RequestedInfo parts = kKeyAndLoc) {
+    std::cout << "seek start: "<<key.toString() <<std::endl;
     if (!_tree->_root)
         return {};
     std::list<nvml::obj::shared_mutex*> locks;
@@ -370,6 +405,7 @@ boost::optional<IndexKeyEntry> PmseCursor::seek(const BSONObj& key,
         _eofRestore = true;
     }
     unlockTree(locks);
+    std::cout << "seek end: "<<key.toString() << " loc="<<_cursor.node->keys[_cursor.index].loc<<std::endl;
     return IndexKeyEntry((_cursor.node->keys[_cursor.index]).getBSON(),
                     RecordId((_cursor.node->keys[_cursor.index]).loc));
 }
