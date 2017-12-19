@@ -51,6 +51,9 @@
 #include "mongo/db/storage/recovery_unit.h"
 #include "mongo/db/operation_context.h"
 
+#include "libpmemobj.h"
+#include "libpmem.h"
+
 using nvml::obj::transaction;
 
 namespace mongo {
@@ -64,6 +67,7 @@ PmseRecordStore::PmseRecordStore(StringData ns,
     : RecordStore(ns), _cappedCallback(nullptr),
       _options(options), _dbPath(dbpath) {
     log() << "ns: " << ns;
+    _isSystem = isSystemCollection(ns);
     if (pool_handler->count(ident.toString()) > 0) {
         _mapPool = pool<root>((*pool_handler)[ident.toString()]);
     } else {
@@ -97,6 +101,7 @@ PmseRecordStore::PmseRecordStore(StringData ns,
         pool_handler->insert(std::pair<std::string, pool_base>(ident.toString(),
                                                                _mapPool));
     }
+    _pool_uuid = _mapPool.get_root().raw_ptr()->pool_uuid_lo;
 
     auto mapper_root = _mapPool.get_root();
 
@@ -131,58 +136,76 @@ StatusWith<RecordId> PmseRecordStore::insertRecord(OperationContext* txn,
                                                    int len,
                                                    Timestamp timestamp,
                                                    bool enforceQuota) {
-    if (isCapped() && len > static_cast<int>(_mapper->getMax())) {
-        return StatusWith<RecordId>(ErrorCodes::BadValue,
-                                    "object to insert exceeds cappedMaxSize");
+    if(_isSystem) {
+        if (isCapped() && len > static_cast<int>(_mapper->getMax())) {
+            return StatusWith<RecordId>(ErrorCodes::BadValue,
+                                        "object to insert exceeds cappedMaxSize");
+        }
+        persistent_ptr<InitData> obj;
+        uint64_t id = 0;
+        try {
+            transaction::exec_tx(_mapPool, [this, &obj, len, data, &id] {
+                obj = pmemobj_tx_alloc(sizeof(InitData::size) + len, 1);
+                obj->size = len;
+                memcpy(obj->data, data, len);
+                id = _mapper->insert(obj);
+            });
+        } catch (std::exception &e) {
+            log() << "RecordStore: " << e.what();
+            return StatusWith<RecordId>(ErrorCodes::OperationFailed,
+                                        "Insert record error");
+        }
+        if (!id)
+            return StatusWith<RecordId>(ErrorCodes::OperationFailed,
+                                        "Null record Id!");
+        _mapper->changeSize(len);
+        txn->recoveryUnit()->registerChange(new InsertChange(_mapper, RecordId(id), len));
+        deleteCappedAsNeeded(txn);
+        while (_mapper->dataSize() > _storageSize) {
+            _storageSize =  _storageSize + baseSize;
+        }
+        return StatusWith<RecordId>(RecordId(id));
     }
-    persistent_ptr<InitData> obj;
-    uint64_t id = 0;
-    try {
-        transaction::exec_tx(_mapPool, [this, &obj, len, data, &id] {
-            obj = pmemobj_tx_alloc(sizeof(InitData::size) + len, 1);
-            obj->size = len;
-            memcpy(obj->data, data, len);
-            id = _mapper->insert(obj);
+    else
+    {
+        persistent_ptr<InitData> obj;
+        transaction::exec_tx(_mapPool, [this, &obj, len, data] {
+                        obj = pmemobj_tx_alloc(sizeof(InitData::size) + len, 1);
+                        obj->size = len;
+                        memcpy(obj->data, data, len);
         });
-    } catch (std::exception &e) {
-        log() << "RecordStore: " << e.what();
-        return StatusWith<RecordId>(ErrorCodes::OperationFailed,
-                                    "Insert record error");
+        return StatusWith<RecordId>(RecordId(obj.raw_ptr()->off));
     }
-    if (!id)
-        return StatusWith<RecordId>(ErrorCodes::OperationFailed,
-                                    "Null record Id!");
-    _mapper->changeSize(len);
-    txn->recoveryUnit()->registerChange(new InsertChange(_mapper, RecordId(id), len));
-    deleteCappedAsNeeded(txn);
-    while (_mapper->dataSize() > _storageSize) {
-        _storageSize =  _storageSize + baseSize;
-    }
-    return StatusWith<RecordId>(RecordId(id));
 }
 
 Status PmseRecordStore::updateRecord(OperationContext* txn, const RecordId& oldLocation,
                                      const char* data, int len, bool enforceQuota,
                                      UpdateNotifier* notifier) {
-    persistent_ptr<InitData> obj;
-    stdx::lock_guard<nvml::obj::mutex> lock(_mapper->_listMutex[oldLocation.repr() % _mapper->getHashmapSize()]);
-    try {
-        transaction::exec_tx(_mapPool, [&obj, len, data, txn, oldLocation, this] {
-            obj = pmemobj_tx_alloc(sizeof(InitData::size) + len, 1);
-            obj->size = len;
-            memcpy(obj->data, data, len);
-            _mapper->updateKV(oldLocation.repr(), obj, txn);
-            _mapper->changeSize(obj->size - len);
-            deleteCappedAsNeeded(txn);
-        });
-    } catch (std::exception &e) {
-        log() << e.what();
-        return Status(ErrorCodes::BadValue, e.what());
+    if(_isSystem) {
+        persistent_ptr<InitData> obj;
+        stdx::lock_guard<nvml::obj::mutex> lock(_mapper->_listMutex[oldLocation.repr() % _mapper->getHashmapSize()]);
+        try {
+            transaction::exec_tx(_mapPool, [&obj, len, data, txn, oldLocation, this] {
+                obj = pmemobj_tx_alloc(sizeof(InitData::size) + len, 1);
+                obj->size = len;
+                memcpy(obj->data, data, len);
+                _mapper->updateKV(oldLocation.repr(), obj, txn);
+                _mapper->changeSize(obj->size - len);
+                deleteCappedAsNeeded(txn);
+            });
+        } catch (std::exception &e) {
+            log() << e.what();
+            return Status(ErrorCodes::BadValue, e.what());
+        }
+        while (_mapper->dataSize() > _storageSize) {
+            _storageSize =  _storageSize + baseSize;
+        }
+        return Status::OK();
     }
-    while (_mapper->dataSize() > _storageSize) {
-        _storageSize =  _storageSize + baseSize;
+    else {
+        std::cout << "update document"<< std::endl;
+        return {ErrorCodes::NeedsDocumentMove, "Update requires document move"};
     }
-    return Status::OK();
 }
 
 void PmseRecordStore::deleteRecord(OperationContext* txn,
@@ -201,7 +224,7 @@ void PmseRecordStore::setCappedCallback(CappedCallback* cb) {
 
 void PmseRecordStore::cappedTruncateAfter(OperationContext* txn, RecordId end,
                                           bool inclusive) {
-    PmseRecordCursor cursor(_mapper, true);
+    PmseRecordCursor cursor(_mapper, true,true, 0 );
     auto rec = cursor.seekExact(end);
     if (!inclusive)
         rec = cursor.next();
@@ -218,13 +241,25 @@ void PmseRecordStore::cappedTruncateAfter(OperationContext* txn, RecordId end,
 
 bool PmseRecordStore::findRecord(OperationContext* txn, const RecordId& loc,
                                  RecordData* rd) const {
+//    std::cout<<"findRecord"<<std::endl;
     persistent_ptr<InitData> obj;
-    if (_mapper->find((uint64_t) loc.repr(), &obj)) {
-        invariant(obj != nullptr);
+    if(_isSystem) {
+        if (_mapper->find((uint64_t) loc.repr(), &obj)) {
+            invariant(obj != nullptr);
+            *rd = RecordData(obj->data, obj->size);
+            return true;
+        }
+        return false;
+    }
+    else{
+        PMEMoid oid;
+        oid.off = loc.repr();
+        oid.pool_uuid_lo = _pool_uuid;
+        obj = persistent_ptr<InitData>(oid);
         *rd = RecordData(obj->data, obj->size);
         return true;
     }
-    return false;
+
 }
 
 void PmseRecordStore::deleteCappedAsNeeded(OperationContext* txn) {
@@ -254,9 +289,13 @@ void PmseRecordStore::waitForAllEarlierOplogWritesToBeVisible(OperationContext* 
     log() << "Not implemented: waitForAllEarlierOplogWritesToBeVisible";
 }
 
-PmseRecordCursor::PmseRecordCursor(persistent_ptr<PmseMap<InitData>> mapper, bool forward)
+PmseRecordCursor::PmseRecordCursor(persistent_ptr<PmseMap<InitData>> mapper, bool forward, bool isSystem, uint64_t pool_uuid)
     : _forward(forward),
-      _lastMoveWasRestore(false) {
+      _lastMoveWasRestore(false),
+      _isSystem(isSystem),
+      _pool_uuid(pool_uuid)
+      {
+//    std::cout<<"PmseRecordCursor"<<std::endl;
     _mapper = mapper;
     _before = nullptr;
     _cur = nullptr;
@@ -376,19 +415,34 @@ boost::optional<Record> PmseRecordCursor::next() {
 }
 
 boost::optional<Record> PmseRecordCursor::seekExact(const RecordId& id) {
-    persistent_ptr<InitData> obj = nullptr;
-    bool status = _mapper->getPair(id.repr(), &_cur);
-    if (_cur == nullptr || _cur->ptr == nullptr) {
-        return boost::none;
+//    std::cout<<"seekExact"<<std::endl;
+    if(_isSystem){
+        persistent_ptr<InitData> obj = nullptr;
+        bool status = _mapper->getPair(id.repr(), &_cur);
+        if (_cur == nullptr || _cur->ptr == nullptr) {
+            return boost::none;
+        }
+        obj = _cur->ptr;
+        if (!status || !obj) {
+            return boost::none;
+        }
+        _position = _cur->position;
+        RecordId a(id.repr());
+        RecordData b(obj->data, obj->size);
+        return {{a, b}};
     }
-    obj = _cur->ptr;
-    if (!status || !obj) {
-        return boost::none;
+    else {
+        PMEMoid oid;
+        persistent_ptr<InitData> obj = nullptr;
+        oid.off = id.repr();
+        oid.pool_uuid_lo = _pool_uuid;
+        obj = persistent_ptr<InitData>(oid);
+        //*rd = RecordData(obj->data, obj->size);
+        RecordId a(id.repr());
+        RecordData b(obj->data, obj->size);
+        return {{a, b}};
+        //return true;
     }
-    _position = _cur->position;
-    RecordId a(id.repr());
-    RecordData b(obj->data, obj->size);
-    return {{a, b}};
 }
 
 void PmseRecordCursor::save() {

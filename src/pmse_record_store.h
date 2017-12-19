@@ -58,7 +58,7 @@ const uint64_t baseSize = 20480;
 
 class PmseRecordCursor final : public SeekableRecordCursor {
  public:
-    PmseRecordCursor(persistent_ptr<PmseMap<InitData>> mapper, bool forward);
+    PmseRecordCursor(persistent_ptr<PmseMap<InitData>> mapper, bool forward, bool isSystem, uint64_t pool_uuid);
 
     boost::optional<Record> next();
 
@@ -90,6 +90,8 @@ class PmseRecordCursor final : public SeekableRecordCursor {
     p<bool> _positionCheck;
     p<int64_t> _actualListNumber = -1;
     p<uint64_t> _position;
+    bool _isSystem;
+    uint64_t _pool_uuid;
 };
 
 class PmseRecordStore : public RecordStore {
@@ -166,7 +168,7 @@ class PmseRecordStore : public RecordStore {
 
     std::unique_ptr<SeekableRecordCursor> getCursor(OperationContext* txn,
                                                     bool forward) const final {
-        return stdx::make_unique<PmseRecordCursor>(_mapper, forward);
+        return stdx::make_unique<PmseRecordCursor>(_mapper, forward, _isSystem, _pool_uuid);
     }
 
     virtual Status truncate(OperationContext* txn) {
@@ -226,6 +228,8 @@ class PmseRecordStore : public RecordStore {
     const StringData _dbPath;
     pool<root> _mapPool;
     persistent_ptr<PmseMap<InitData>> _mapper;
+    bool _isSystem;
+    uint64_t _pool_uuid;
 };
 }  // namespace mongo
 #endif  // SRC_PMSE_RECORD_STORE_H_
